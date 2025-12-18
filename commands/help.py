@@ -60,6 +60,10 @@ class Help(commands.Cog):
                 "name": "/dq",
                 "description": "Get a random famous quote (Daily Quote)"
             },
+            {
+                "name": "/warning",
+                "description": "Issue a warning to a user (Verbal/Serious/Shut Up)"
+            },
         ]
 
         # Add each command to the embed

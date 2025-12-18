@@ -23,4 +23,5 @@ Thumbs.db
 
 # Bot files
 logs/
+data/
 .bot.pid
