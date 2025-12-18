@@ -54,7 +54,7 @@ class Help(commands.Cog):
             },
             {
                 "name": "/timeout",
-                "description": "Timeout a user for a specified time (e.g. /timeout @user 10)"
+                "description": "Timeout a user (e.g. /timeout @user 10 Being annoying)"
             },
         ]
 

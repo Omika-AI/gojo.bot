@@ -20,24 +20,26 @@ class Timeout(commands.Cog):
     @app_commands.command(name="timeout", description="Timeout a user for a specified time")
     @app_commands.describe(
         user="The user to timeout",
-        minutes="How long to timeout the user (in minutes)"
+        minutes="How long to timeout the user (in minutes)",
+        reason="The reason for the timeout"
     )
     async def timeout(
         self,
         interaction: discord.Interaction,
         user: discord.Member,
-        minutes: int
+        minutes: int,
+        reason: str
     ):
         """
         Slash command that timeouts a user
-        Usage: /timeout @user 10
+        Usage: /timeout @user 10 Being annoying
         """
         # Log that someone used this command
         guild_name = interaction.guild.name if interaction.guild else None
         log_command(
             user=str(interaction.user),
             user_id=interaction.user.id,
-            command=f"timeout {user} {minutes}min",
+            command=f"timeout {user} {minutes}min reason: {reason}",
             guild=guild_name
         )
 
@@ -110,14 +112,14 @@ class Timeout(commands.Cog):
             timeout_duration = timedelta(minutes=minutes)
 
             # Apply the timeout
-            await user.timeout(timeout_duration, reason=f"Timed out by {interaction.user}")
+            await user.timeout(timeout_duration, reason=f"{reason} (by {interaction.user})")
 
             # Log success
-            logger.info(f"User {user} was timed out for {minutes} minutes by {interaction.user}")
+            logger.info(f"User {user} was timed out for {minutes} minutes by {interaction.user}. Reason: {reason}")
 
             # Send success message
             await interaction.response.send_message(
-                f"**{user.display_name}** has been timed out for **{minutes} minute(s)**!"
+                f"**{user.display_name}** has been timed out for **{minutes} minute(s)**!\n**Reason:** {reason}"
             )
 
         except discord.Forbidden:
