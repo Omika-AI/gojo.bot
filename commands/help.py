@@ -48,12 +48,10 @@ class Help(commands.Cog):
                 "name": "/help",
                 "description": "Shows this help message with all available commands"
             },
-            # Add more commands here as you create them
-            # Example:
-            # {
-            #     "name": "/ping",
-            #     "description": "Check if the bot is online"
-            # },
+            {
+                "name": "/ping",
+                "description": "Check if the bot is online"
+            },
         ]
 
         # Add each command to the embed
