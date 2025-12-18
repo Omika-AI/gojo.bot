@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import config
+from utils.logger import log_command
 
 
 class Help(commands.Cog):
@@ -22,6 +23,15 @@ class Help(commands.Cog):
         Slash command that displays help information
         Usage: /help
         """
+        # Log that someone used this command
+        guild_name = interaction.guild.name if interaction.guild else None
+        log_command(
+            user=str(interaction.user),
+            user_id=interaction.user.id,
+            command="help",
+            guild=guild_name
+        )
+
         # Create an embed for a nice looking help message
         embed = discord.Embed(
             title=f"{config.BOT_NAME} - Help",

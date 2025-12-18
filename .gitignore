@@ -20,3 +20,7 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Bot files
+logs/
+.bot.pid
