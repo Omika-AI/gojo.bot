@@ -56,6 +56,10 @@ class Help(commands.Cog):
                 "name": "/timeout",
                 "description": "Timeout a user (e.g. /timeout @user 10 Being annoying)"
             },
+            {
+                "name": "/dq",
+                "description": "Get a random famous quote (Daily Quote)"
+            },
         ]
 
         # Add each command to the embed
