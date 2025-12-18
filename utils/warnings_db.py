@@ -159,3 +159,38 @@ def get_user_warnings(guild_id: int, user_id: int) -> List[Dict]:
         return []
 
     return data[guild_key][user_key].get("warnings", [])
+
+
+def get_recent_warnings(guild_id: int, user_id: int, days: int = 7) -> List[Dict]:
+    """
+    Get warnings from the last N days for a user.
+
+    Args:
+        guild_id: The Discord server ID
+        user_id: The user's Discord ID
+        days: Number of days to look back (default: 7)
+
+    Returns:
+        List of warning dictionaries from the specified period
+    """
+    data = _load_warnings()
+
+    guild_key = str(guild_id)
+    user_key = str(user_id)
+
+    if guild_key not in data or user_key not in data[guild_key]:
+        return []
+
+    warnings = data[guild_key][user_key].get("warnings", [])
+    cutoff = datetime.now() - timedelta(days=days)
+
+    recent = []
+    for warning in warnings:
+        try:
+            warning_time = datetime.fromisoformat(warning["timestamp"])
+            if warning_time > cutoff:
+                recent.append(warning)
+        except Exception:
+            pass
+
+    return recent

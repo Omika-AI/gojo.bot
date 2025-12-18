@@ -62,7 +62,7 @@ class Help(commands.Cog):
             },
             {
                 "name": "/warning",
-                "description": "Issue a warning to a user (Verbal/Serious/Shut Up)"
+                "description": "Issue a warning to a user (🟢 Minor / 🟡 Medium / 🔴 Serious)"
             },
         ]
 

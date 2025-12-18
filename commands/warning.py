@@ -7,17 +7,30 @@ Tracks warnings per user and notes repeat offenders
 import discord
 from discord import app_commands
 from discord.ext import commands
-from enum import Enum
+from datetime import datetime
 
 from utils.logger import log_command, logger
-from utils.warnings_db import add_warning, get_recent_warning_count
+from utils.warnings_db import add_warning, get_recent_warnings
 
 
-class WarningType(Enum):
-    """Types of warnings that can be issued"""
-    verbal = "Verbal Warning"
-    serious = "Serious Warning"
-    shutup = "Shut Up Warning"
+# Warning type configuration with emojis and colors
+WARNING_CONFIG = {
+    "minor": {
+        "name": "Minor",
+        "emoji": "🟢",
+        "color": discord.Color.green()
+    },
+    "medium": {
+        "name": "Medium",
+        "emoji": "🟡",
+        "color": discord.Color.yellow()
+    },
+    "serious": {
+        "name": "Serious",
+        "emoji": "🔴",
+        "color": discord.Color.red()
+    }
+}
 
 
 class Warning(commands.Cog):
@@ -33,9 +46,9 @@ class Warning(commands.Cog):
         reason="The reason for the warning"
     )
     @app_commands.choices(warning_type=[
-        app_commands.Choice(name="Verbal Warning", value="verbal"),
-        app_commands.Choice(name="Serious Warning", value="serious"),
-        app_commands.Choice(name="Shut Up Warning", value="shutup"),
+        app_commands.Choice(name="🟢 Minor", value="minor"),
+        app_commands.Choice(name="🟡 Medium", value="medium"),
+        app_commands.Choice(name="🔴 Serious", value="serious"),
     ])
     async def warning(
         self,
@@ -46,7 +59,7 @@ class Warning(commands.Cog):
     ):
         """
         Slash command that issues a warning to a user
-        Usage: /warning @user Verbal Warning Being rude
+        Usage: /warning @user Minor Being rude
         """
         # Log that someone used this command
         guild_name = interaction.guild.name if interaction.guild else None
@@ -89,8 +102,9 @@ class Warning(commands.Cog):
             )
             return
 
-        # Get the warning type display name
-        warning_display = WarningType[warning_type].value
+        # Get warning config
+        config = WARNING_CONFIG[warning_type]
+        warning_display = f"{config['emoji']} {config['name']}"
 
         # Add the warning to the database
         warning_count = add_warning(
@@ -105,18 +119,10 @@ class Warning(commands.Cog):
         # Log the warning
         logger.info(f"Warning issued to {user} by {interaction.user}: {warning_display} - {reason}")
 
-        # Set embed color based on warning type
-        if warning_type == "verbal":
-            color = discord.Color.yellow()
-        elif warning_type == "serious":
-            color = discord.Color.orange()
-        else:  # shutup
-            color = discord.Color.red()
-
         # Create the warning embed
         embed = discord.Embed(
-            title="Warning Issued",
-            color=color
+            title=f"{config['emoji']} Warning Issued",
+            color=config['color']
         )
 
         embed.add_field(name="User", value=user.mention, inline=True)
@@ -124,14 +130,43 @@ class Warning(commands.Cog):
         embed.add_field(name="Reason", value=reason, inline=False)
         embed.add_field(name="Issued By", value=interaction.user.mention, inline=True)
 
-        # Add warning count if more than 1
+        # Add warning count and history if more than 1
         if warning_count > 1:
             embed.add_field(
-                name="Warning Count",
+                name="⚠️ Warning Count",
                 value=f"This is their **{warning_count}** warning in the last 7 days!",
                 inline=False
             )
-            embed.set_footer(text="Multiple warnings detected - consider further action")
+
+            # Get recent warnings to show history
+            recent_warnings = get_recent_warnings(
+                guild_id=interaction.guild.id,
+                user_id=user.id,
+                days=7
+            )
+
+            # Build the warning history list (exclude the current one, it's the last)
+            if len(recent_warnings) > 1:
+                history_lines = []
+                # Show all warnings except the most recent one (which is the current warning)
+                for w in recent_warnings[:-1]:
+                    # Parse timestamp
+                    try:
+                        ts = datetime.fromisoformat(w["timestamp"])
+                        date_str = ts.strftime("%m/%d %H:%M")
+                    except:
+                        date_str = "Unknown"
+
+                    history_lines.append(f"• {w['type']} - {date_str}")
+
+                history_text = "\n".join(history_lines)
+                embed.add_field(
+                    name="📋 Previous Warnings (Last 7 Days)",
+                    value=history_text,
+                    inline=False
+                )
+
+            embed.set_footer(text="⚠️ Multiple warnings detected - consider further action")
         else:
             embed.set_footer(text="This is their first warning in the last 7 days")
 
