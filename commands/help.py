@@ -52,6 +52,10 @@ class Help(commands.Cog):
                 "name": "/ping",
                 "description": "Check if the bot is online"
             },
+            {
+                "name": "/timeout",
+                "description": "Timeout a user for a specified time (e.g. /timeout @user 10)"
+            },
         ]
 
         # Add each command to the embed
