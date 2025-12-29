@@ -63,6 +63,13 @@ COMMANDS_REGISTRY = [
 
     # Moderation Commands (Require specific permissions)
     {
+        "name": "/moderationpanel",
+        "description": "Interactive panel with all moderation tools (kick, ban, timeout, warn, clear messages)",
+        "usage": "/moderationpanel @user",
+        "category": "moderation",
+        "permission": "moderate_members"
+    },
+    {
         "name": "/timeout",
         "description": "Temporarily mute a user for a specified time",
         "usage": "/timeout @user 10 Being disruptive",
