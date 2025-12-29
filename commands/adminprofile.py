@@ -1,10 +1,11 @@
 """
-!adminprofile Command
+/adminprofile Command
 Display detailed profile stats for a Discord member
 Only users with Administrator permission can use this command
 """
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from datetime import datetime
 
@@ -17,35 +18,37 @@ class AdminProfile(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name="adminprofile")
-    async def adminprofile(self, ctx: commands.Context, user: discord.Member = None):
+    @app_commands.command(name="adminprofile", description="View detailed profile stats for a member (Admin only)")
+    @app_commands.describe(user="The member to view profile stats for")
+    async def adminprofile(self, interaction: discord.Interaction, user: discord.Member):
         """
-        Text command that displays detailed profile stats for a user
-        Usage: !adminprofile @user
+        Slash command that displays detailed profile stats for a user
+        Usage: /adminprofile @user
         Only administrators can use this command
         """
         # Log that someone used this command
-        guild_name = ctx.guild.name if ctx.guild else None
+        guild_name = interaction.guild.name if interaction.guild else None
         log_command(
-            user=str(ctx.author),
-            user_id=ctx.author.id,
+            user=str(interaction.user),
+            user_id=interaction.user.id,
             command=f"adminprofile {user}",
             guild=guild_name
         )
 
         # Check if the command is used in a server (not DMs)
-        if not ctx.guild:
-            await ctx.send("This command can only be used in a server!")
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command can only be used in a server!",
+                ephemeral=True
+            )
             return
 
         # Check if the user has Administrator permission
-        if not ctx.author.guild_permissions.administrator:
-            await ctx.send("❌ You need **Administrator** permission to use this command!")
-            return
-
-        # If no user specified, show error
-        if user is None:
-            await ctx.send("❌ Please mention a user! Usage: `!adminprofile @user`")
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ You need **Administrator** permission to use this command!",
+                ephemeral=True
+            )
             return
 
         try:
@@ -212,18 +215,21 @@ class AdminProfile(commands.Cog):
 
             # Footer
             embed.set_footer(
-                text=f"Requested by {ctx.author}",
-                icon_url=ctx.author.display_avatar.url
+                text=f"Requested by {interaction.user}",
+                icon_url=interaction.user.display_avatar.url
             )
 
             # Send the embed
-            await ctx.send(embed=embed)
+            await interaction.response.send_message(embed=embed)
 
-            logger.info(f"Admin profile viewed for {user} by {ctx.author}")
+            logger.info(f"Admin profile viewed for {user} by {interaction.user}")
 
         except Exception as e:
             logger.error(f"Failed to get profile for {user}: {e}")
-            await ctx.send(f"❌ Something went wrong while fetching the profile.")
+            await interaction.response.send_message(
+                "❌ Something went wrong while fetching the profile.",
+                ephemeral=True
+            )
 
 
 # Required setup function - Discord.py calls this to load the cog
