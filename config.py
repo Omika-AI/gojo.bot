@@ -18,6 +18,10 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 # OpenRouter API endpoint
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Spotify API Credentials - Used for music features
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+
 # Bot settings
 BOT_NAME = "Gojo"
 BOT_VERSION = "1.0.0"

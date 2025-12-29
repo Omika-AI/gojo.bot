@@ -61,6 +61,78 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Music Commands (Everyone can use)
+    {
+        "name": "/play",
+        "description": "Play a song from Spotify link or search query",
+        "usage": "/play Bohemian Rhapsody OR /play <spotify link>",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/pause",
+        "description": "Pause the currently playing song",
+        "usage": "/pause",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/resume",
+        "description": "Resume a paused song",
+        "usage": "/resume",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/skip",
+        "description": "Skip to the next song in queue",
+        "usage": "/skip",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/stop",
+        "description": "Stop music and leave the voice channel",
+        "usage": "/stop",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/queue",
+        "description": "View the current music queue",
+        "usage": "/queue",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/nowplaying",
+        "description": "Show details about the current song",
+        "usage": "/nowplaying",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/volume",
+        "description": "Adjust the music volume (0-100)",
+        "usage": "/volume 50",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/shuffle",
+        "description": "Shuffle the songs in the queue",
+        "usage": "/shuffle",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/clear",
+        "description": "Clear all songs from the queue",
+        "usage": "/clear",
+        "category": "music",
+        "permission": None
+    },
+
     # Moderation Commands (Require specific permissions)
     {
         "name": "/moderationpanel",
@@ -105,6 +177,11 @@ CATEGORY_INFO = {
         "name": "Fun Commands",
         "emoji": "🎮",
         "description": "Entertainment and fun features"
+    },
+    "music": {
+        "name": "Music Commands",
+        "emoji": "🎵",
+        "description": "Play music from Spotify in voice channels"
     },
     "moderation": {
         "name": "Moderation Commands",
@@ -153,7 +230,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category with commands
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "moderation", "admin"]
+            cat for cat in ["general", "fun", "music", "moderation", "admin"]
             if cat in self.accessible_commands
         ]
         self.total_pages = 2 + len(self.categories_with_commands)
@@ -281,6 +358,19 @@ class InformationView(View):
             value=(
                 "• **Daily Quotes** - Inspirational quotes from movies, anime & famous people\n"
                 "• More fun features coming soon!"
+            ),
+            inline=False
+        )
+
+        # Music Features
+        embed.add_field(
+            name="🎵 Music System",
+            value=(
+                "• **Spotify Integration** - Play songs from Spotify links\n"
+                "• **Search & Play** - Search for any song by name\n"
+                "• **Queue System** - Queue up multiple songs\n"
+                "• **Playback Controls** - Pause, resume, skip, stop\n"
+                "• **Volume Control** - Adjust volume as needed"
             ),
             inline=False
         )
