@@ -18,6 +18,8 @@ from utils.logger import logger, log_startup, log_shutdown, log_error
 # Intents control what events the bot can receive from Discord
 intents = discord.Intents.default()
 intents.message_content = True  # Allows bot to read message content
+intents.members = True  # Allows bot to access member info (for adminprofile command)
+intents.presences = True  # Allows bot to see user status (online/offline/etc)
 
 # Create the bot with a command prefix (for text commands) and intents
 bot = commands.Bot(command_prefix="!", intents=intents)
