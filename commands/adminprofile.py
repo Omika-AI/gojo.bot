@@ -163,32 +163,41 @@ class AdminProfile(commands.Cog):
             )
 
             # Flags section (badges)
+            # Note: Discord API doesn't expose Nitro, Quest, or Apprentice badges for privacy
             flags = user.public_flags
             badges = []
             if flags.staff:
-                badges.append("Discord Staff")
+                badges.append("⚡ Discord Staff")
             if flags.partner:
-                badges.append("Partner")
+                badges.append("👑 Partner")
             if flags.hypesquad:
-                badges.append("HypeSquad Events")
+                badges.append("🏠 HypeSquad Events")
             if flags.bug_hunter:
-                badges.append("Bug Hunter")
+                badges.append("🐛 Bug Hunter")
             if flags.bug_hunter_level_2:
-                badges.append("Bug Hunter Level 2")
+                badges.append("🐛 Bug Hunter Level 2")
             if flags.hypesquad_bravery:
-                badges.append("HypeSquad Bravery")
+                badges.append("🟠 HypeSquad Bravery")
             if flags.hypesquad_brilliance:
-                badges.append("HypeSquad Brilliance")
+                badges.append("🟣 HypeSquad Brilliance")
             if flags.hypesquad_balance:
-                badges.append("HypeSquad Balance")
+                badges.append("🟢 HypeSquad Balance")
             if flags.early_supporter:
-                badges.append("Early Supporter")
+                badges.append("💎 Early Supporter")
             if flags.verified_bot_developer:
-                badges.append("Verified Bot Developer")
+                badges.append("🤖 Verified Bot Developer")
             if flags.active_developer:
-                badges.append("Active Developer")
+                badges.append("👨‍💻 Active Developer")
+            if flags.discord_certified_moderator:
+                badges.append("🛡️ Certified Moderator")
+            if flags.verified_bot:
+                badges.append("✅ Verified Bot")
 
-            badges_text = ", ".join(badges) if badges else "None"
+            # Check for server booster (this IS detectable)
+            if user.premium_since:
+                badges.append("💜 Server Booster")
+
+            badges_text = "\n".join(badges) if badges else "None detected\n*(Nitro, Quest & some badges are hidden by Discord)*"
 
             embed.add_field(
                 name="🏅 Discord Badges",
