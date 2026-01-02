@@ -14,6 +14,7 @@ from discord.ui import View, Button, Modal, TextInput, Select
 from typing import Optional, List
 
 from utils.logger import log_command, logger
+from utils.moderation_logs import log_action, ModAction
 
 
 # =============================================================================
@@ -345,6 +346,18 @@ class ModTalkView(View):
 
             # Log the action
             logger.info(f"ModTalk: {interaction.user} ({interaction.user.id}) sent message to #{channel.name}")
+
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.MODTALK,
+                details={
+                    "channel": channel.name,
+                    "prefix": self.state.command_text if self.state.include_command else None
+                }
+            )
 
             # Cleanup
             if self.state.user_id in active_modtalks:

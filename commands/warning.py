@@ -11,6 +11,7 @@ from datetime import datetime
 
 from utils.logger import log_command, logger
 from utils.warnings_db import add_warning, get_recent_warnings
+from utils.moderation_logs import log_action, ModAction
 
 
 # Warning type configuration with emojis and colors
@@ -118,6 +119,18 @@ class Warning(commands.Cog):
 
         # Log the warning
         logger.info(f"Warning issued to {user} by {interaction.user}: {warning_display} - {reason}")
+
+        # Log to moderation logs
+        log_action(
+            guild_id=interaction.guild.id,
+            moderator_id=interaction.user.id,
+            moderator_name=str(interaction.user),
+            action=ModAction.WARN,
+            target_id=user.id,
+            target_name=str(user),
+            reason=reason,
+            details={"warning_type": warning_display, "total_warnings": warning_count}
+        )
 
         # Create the warning embed
         embed = discord.Embed(

@@ -22,6 +22,7 @@ from typing import Optional
 
 from utils.logger import log_command, logger
 from utils.warnings_db import add_warning, get_user_warnings
+from utils.moderation_logs import log_action, ModAction
 
 
 def is_moderator(user: discord.Member) -> bool:
@@ -111,6 +112,18 @@ class TimeoutModal(Modal):
 
             logger.info(f"User {self.target} timed out for {minutes} min by {interaction.user}: {self.reason.value}")
 
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.TIMEOUT,
+                target_id=self.target.id,
+                target_name=str(self.target),
+                reason=self.reason.value,
+                details={"duration_minutes": minutes}
+            )
+
             # Update the panel
             await interaction.response.edit_message(
                 embed=self.panel_view.get_panel_embed(),
@@ -165,6 +178,17 @@ class KickModal(Modal):
             await self.target.kick(reason=f"{self.reason.value} (by {interaction.user})")
 
             logger.info(f"User {self.target} kicked by {interaction.user}: {self.reason.value}")
+
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.KICK,
+                target_id=self.target.id,
+                target_name=str(self.target),
+                reason=self.reason.value
+            )
 
             await interaction.response.send_message(
                 f"✅ **{self.target.display_name}** has been kicked from the server!\n"
@@ -223,6 +247,18 @@ class BanModal(Modal):
 
             logger.info(f"User {self.target} banned by {interaction.user}: {self.reason.value}")
 
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.BAN,
+                target_id=self.target.id,
+                target_name=str(self.target),
+                reason=self.reason.value,
+                details={"delete_days": delete_days}
+            )
+
             delete_text = f" (deleted {delete_days} days of messages)" if delete_days > 0 else ""
 
             await interaction.response.send_message(
@@ -276,6 +312,18 @@ class WarnModal(Modal):
             )
 
             logger.info(f"Warning issued to {self.target} by {interaction.user}: {self.warning_type} - {self.reason.value}")
+
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.WARN,
+                target_id=self.target.id,
+                target_name=str(self.target),
+                reason=self.reason.value,
+                details={"warning_type": self.warning_type, "total_warnings": warning_count}
+            )
 
             # Update the panel
             await interaction.response.edit_message(
@@ -335,6 +383,17 @@ class ClearMessagesModal(Modal):
                         pass
 
             logger.info(f"Cleared {deleted} messages from {self.target} by {interaction.user}")
+
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.CLEAR,
+                target_id=self.target.id,
+                target_name=str(self.target),
+                details={"messages_deleted": deleted, "channel": interaction.channel.name}
+            )
 
             await interaction.followup.send(
                 f"🧹 Deleted **{deleted}** message(s) from **{self.target.display_name}** in this channel!",
@@ -569,6 +628,17 @@ class ModerationPanelView(View):
             await self.target.timeout(None, reason=f"Timeout removed by {interaction.user}")
 
             logger.info(f"Timeout removed from {self.target} by {interaction.user}")
+
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.UNMUTE,
+                target_id=self.target.id,
+                target_name=str(self.target),
+                reason="Timeout removed"
+            )
 
             # Update the panel
             await interaction.response.edit_message(

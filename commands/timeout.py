@@ -9,6 +9,7 @@ from discord.ext import commands
 from datetime import timedelta
 
 from utils.logger import log_command, logger
+from utils.moderation_logs import log_action, ModAction
 
 
 class Timeout(commands.Cog):
@@ -116,6 +117,18 @@ class Timeout(commands.Cog):
 
             # Log success
             logger.info(f"User {user} was timed out for {minutes} minutes by {interaction.user}. Reason: {reason}")
+
+            # Log to moderation logs
+            log_action(
+                guild_id=interaction.guild.id,
+                moderator_id=interaction.user.id,
+                moderator_name=str(interaction.user),
+                action=ModAction.TIMEOUT,
+                target_id=user.id,
+                target_name=str(user),
+                reason=reason,
+                details={"duration_minutes": minutes}
+            )
 
             # Send success message
             await interaction.response.send_message(
