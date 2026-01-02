@@ -487,7 +487,7 @@ class EmbedBodyModal(Modal):
         self.embed_index = embed_index
         self.embed = state.embeds[embed_index]
 
-        self.title = TextInput(
+        self.embed_title = TextInput(
             label="Title",
             placeholder="Embed title",
             required=False,
@@ -495,7 +495,7 @@ class EmbedBodyModal(Modal):
             default=self.embed.title or ""
         )
 
-        self.description = TextInput(
+        self.embed_description = TextInput(
             label="Description",
             placeholder="Main embed text",
             required=False,
@@ -504,7 +504,7 @@ class EmbedBodyModal(Modal):
             default=self.embed.description or ""
         )
 
-        self.url = TextInput(
+        self.embed_url = TextInput(
             label="Title URL (optional)",
             placeholder="https://example.com",
             required=False,
@@ -512,7 +512,7 @@ class EmbedBodyModal(Modal):
             default=self.embed.url or ""
         )
 
-        self.color = TextInput(
+        self.embed_color = TextInput(
             label="Color (hex or name)",
             placeholder="e.g., #FF0000 or red, blue, green",
             required=False,
@@ -520,18 +520,18 @@ class EmbedBodyModal(Modal):
             default=f"#{self.embed.color:06X}" if self.embed.color else ""
         )
 
-        self.add_item(self.title)
-        self.add_item(self.description)
-        self.add_item(self.url)
-        self.add_item(self.color)
+        self.add_item(self.embed_title)
+        self.add_item(self.embed_description)
+        self.add_item(self.embed_url)
+        self.add_item(self.embed_color)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            self.embed.title = self.title.value or None
-            self.embed.description = self.description.value or None
+            self.embed.title = self.embed_title.value or None
+            self.embed.description = self.embed_description.value or None
             # Fix URL by adding https:// if missing
-            self.embed.url = fix_url(self.url.value)
-            self.embed.color = parse_color(self.color.value)
+            self.embed.url = fix_url(self.embed_url.value)
+            self.embed.color = parse_color(self.embed_color.value)
 
             await interaction.response.edit_message(
                 content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",

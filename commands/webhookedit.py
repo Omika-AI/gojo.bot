@@ -257,14 +257,14 @@ class EditEmbedBodyModal(Modal):
         self.embed_index = embed_index
         self.embed = state.embeds[embed_index]
 
-        self.title = TextInput(
+        self.embed_title = TextInput(
             label="Title",
             required=False,
             max_length=256,
             default=self.embed.title or ""
         )
 
-        self.description = TextInput(
+        self.embed_description = TextInput(
             label="Description",
             required=False,
             max_length=4000,
@@ -272,32 +272,32 @@ class EditEmbedBodyModal(Modal):
             default=self.embed.description or ""
         )
 
-        self.url = TextInput(
+        self.embed_url = TextInput(
             label="Title URL (optional)",
             required=False,
             max_length=500,
             default=self.embed.url or ""
         )
 
-        self.color = TextInput(
+        self.embed_color = TextInput(
             label="Color (hex or name)",
             required=False,
             max_length=20,
             default=f"#{self.embed.color:06X}" if self.embed.color else ""
         )
 
-        self.add_item(self.title)
-        self.add_item(self.description)
-        self.add_item(self.url)
-        self.add_item(self.color)
+        self.add_item(self.embed_title)
+        self.add_item(self.embed_description)
+        self.add_item(self.embed_url)
+        self.add_item(self.embed_color)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            self.embed.title = self.title.value or None
-            self.embed.description = self.description.value or None
+            self.embed.title = self.embed_title.value or None
+            self.embed.description = self.embed_description.value or None
             # Fix URL by adding https:// if missing
-            self.embed.url = fix_url(self.url.value)
-            self.embed.color = parse_color(self.color.value)
+            self.embed.url = fix_url(self.embed_url.value)
+            self.embed.color = parse_color(self.embed_color.value)
             self.state.has_changes = True
 
             await interaction.response.edit_message(
@@ -521,29 +521,29 @@ class NewEmbedModal(Modal):
         super().__init__(title="Add New Embed")
         self.state = state
 
-        self.title = TextInput(
+        self.embed_title = TextInput(
             label="Title",
             required=False,
             max_length=256
         )
 
-        self.description = TextInput(
+        self.embed_description = TextInput(
             label="Description",
             required=False,
             max_length=4000,
             style=discord.TextStyle.paragraph
         )
 
-        self.color = TextInput(
+        self.embed_color = TextInput(
             label="Color (hex or name)",
             placeholder="e.g., #FF0000 or red, blue, green",
             required=False,
             max_length=20
         )
 
-        self.add_item(self.title)
-        self.add_item(self.description)
-        self.add_item(self.color)
+        self.add_item(self.embed_title)
+        self.add_item(self.embed_description)
+        self.add_item(self.embed_color)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -555,9 +555,9 @@ class NewEmbedModal(Modal):
                 return
 
             new_embed = EmbedData(
-                title=self.title.value or None,
-                description=self.description.value or None,
-                color=parse_color(self.color.value)
+                title=self.embed_title.value or None,
+                description=self.embed_description.value or None,
+                color=parse_color(self.embed_color.value)
             )
 
             self.state.embeds.append(new_embed)
