@@ -533,6 +533,96 @@ class ModerationLogs(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @app_commands.command(name="modactivity", description="View a moderator's action history (Moderator only)")
+    @app_commands.describe(moderator="The moderator to check activity for (leave empty for yourself)")
+    async def modactivity(
+        self,
+        interaction: discord.Interaction,
+        moderator: Optional[discord.User] = None
+    ):
+        """View what actions a moderator has taken"""
+        log_command(
+            user=str(interaction.user),
+            user_id=interaction.user.id,
+            command="modactivity",
+            guild=interaction.guild.name if interaction.guild else None
+        )
+
+        # Check if in a server
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command can only be used in a server!",
+                ephemeral=True
+            )
+            return
+
+        # Check for Moderator permissions
+        has_permission = (
+            interaction.user.guild_permissions.manage_messages or
+            interaction.user.guild_permissions.manage_guild or
+            interaction.user.guild_permissions.administrator
+        )
+
+        if not has_permission:
+            await interaction.response.send_message(
+                "You need **Manage Messages** permission or higher to view moderator activity!",
+                ephemeral=True
+            )
+            return
+
+        # Default to self if no moderator specified
+        target_mod = moderator or interaction.user
+
+        activity = get_moderator_activity(interaction.guild.id, target_mod.id, limit=25)
+
+        embed = discord.Embed(
+            title=f"\U0001f6e1\ufe0f Moderator Activity",
+            description=f"**Moderator:** {target_mod.mention} ({target_mod.id})",
+            color=discord.Color.blue()
+        )
+
+        if not activity:
+            embed.add_field(
+                name="No Activity",
+                value=f"{target_mod.display_name} has no recorded moderation actions in this server.",
+                inline=False
+            )
+        else:
+            for log in activity[:15]:  # Show last 15
+                action = log.get("action", "unknown")
+                emoji = format_action_emoji(action)
+                timestamp = format_timestamp(log.get("timestamp", ""))
+
+                target = log.get("target", {})
+                target_name = target.get("name", "N/A")
+                reason = log.get("reason", "No reason")
+
+                if len(reason) > 80:
+                    reason = reason[:77] + "..."
+
+                # Build value text
+                if target_name != "N/A":
+                    value = f"**Target:** {target_name}\n**Reason:** {reason}"
+                else:
+                    # For actions without a target (like modtalk)
+                    details = log.get("details", {})
+                    if details:
+                        detail_str = ", ".join(f"{k}: {v}" for k, v in details.items() if v)
+                        value = f"**Details:** {detail_str}" if detail_str else "No details"
+                    else:
+                        value = f"**Reason:** {reason}"
+
+                embed.add_field(
+                    name=f"{emoji} {action.upper()} - {timestamp}",
+                    value=value,
+                    inline=False
+                )
+
+        total = len(activity)
+        embed.set_footer(text=f"Showing {min(15, total)} of {total} recorded actions")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="clearlogs", description="Clear all moderation logs (Server Owner only)")
     async def clearlogs(self, interaction: discord.Interaction):
         """Clear all moderation logs - Server Owner only"""
