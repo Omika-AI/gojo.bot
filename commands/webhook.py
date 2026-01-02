@@ -69,28 +69,33 @@ class EmbedData:
         embed = discord.Embed(
             title=self.title,
             description=self.description,
-            url=self.url,
+            url=self.url if self.url else None,
             color=discord.Color(self.color) if self.color else discord.Color.blue()
         )
 
         if self.author_name:
             embed.set_author(
                 name=self.author_name,
-                url=self.author_url,
-                icon_url=self.author_icon_url
+                url=self.author_url if self.author_url else None,
+                icon_url=self.author_icon_url if self.author_icon_url else None
             )
 
         for f in self.fields:
             embed.add_field(name=f.name, value=f.value, inline=f.inline)
 
-        if self.thumbnail_url:
+        # Only set thumbnail if URL is valid and not empty
+        if self.thumbnail_url and self.thumbnail_url.strip():
             embed.set_thumbnail(url=self.thumbnail_url)
 
-        if self.image_url:
+        # Only set image if URL is valid and not empty
+        if self.image_url and self.image_url.strip():
             embed.set_image(url=self.image_url)
 
         if self.footer_text:
-            embed.set_footer(text=self.footer_text, icon_url=self.footer_icon_url)
+            embed.set_footer(
+                text=self.footer_text,
+                icon_url=self.footer_icon_url if self.footer_icon_url else None
+            )
 
         if self.timestamp:
             embed.timestamp = datetime.utcnow()
@@ -207,10 +212,14 @@ def fix_url(url: str) -> Optional[str]:
     Fix a URL by adding https:// if missing.
     Returns None if empty, the fixed URL otherwise.
     """
-    if not url or not url.strip():
+    if not url:
         return None
 
     url = url.strip()
+
+    # If empty after stripping, return None
+    if not url:
+        return None
 
     # If it already has a scheme, return as-is
     if url.startswith('http://') or url.startswith('https://'):
@@ -221,8 +230,8 @@ def fix_url(url: str) -> Optional[str]:
     if '.' in url and ' ' not in url:
         return f"https://{url}"
 
-    # Return as-is and let Discord validate it
-    return url
+    # Return None for invalid URLs (no domain pattern)
+    return None
 
 
 # =============================================================================
@@ -635,11 +644,27 @@ class EmbedImagesModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         try:
             # Fix URLs by adding https:// if missing
-            self.embed.thumbnail_url = fix_url(self.thumbnail.value)
-            self.embed.image_url = fix_url(self.image.value)
+            thumbnail_fixed = fix_url(self.thumbnail.value)
+            image_fixed = fix_url(self.image.value)
+
+            # Log for debugging
+            logger.info(f"Images modal - Thumbnail input: '{self.thumbnail.value}' -> Fixed: '{thumbnail_fixed}'")
+            logger.info(f"Images modal - Image input: '{self.image.value}' -> Fixed: '{image_fixed}'")
+
+            self.embed.thumbnail_url = thumbnail_fixed
+            self.embed.image_url = image_fixed
+
+            # Show confirmation of what was set
+            status_parts = [f"**Editing Embed {self.embed_index + 1}**"]
+            if thumbnail_fixed:
+                status_parts.append(f"Thumbnail: Set")
+            if image_fixed:
+                status_parts.append(f"Image: Set")
+            if not thumbnail_fixed and not image_fixed:
+                status_parts.append("No images set")
 
             await interaction.response.edit_message(
-                content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
+                content="\n".join(status_parts),
                 view=EmbedBuilderView(self.state, self.embed_index)
             )
         except Exception as e:
@@ -1037,39 +1062,66 @@ class EmbedBuilderView(View):
 
     @discord.ui.button(label="Author", style=discord.ButtonStyle.secondary, row=0)
     async def set_author(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(
-            EmbedAuthorModal(self.state, self.embed_index)
-        )
+        try:
+            await interaction.response.send_modal(
+                EmbedAuthorModal(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error opening Author modal: {e}")
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
 
     @discord.ui.button(label="Body", style=discord.ButtonStyle.secondary, row=0)
     async def set_body(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(
-            EmbedBodyModal(self.state, self.embed_index)
-        )
+        try:
+            # Ensure embed exists and get fresh reference
+            if self.embed_index >= len(self.state.embeds):
+                await interaction.response.send_message(
+                    "Embed no longer exists! Please go back and try again.",
+                    ephemeral=True
+                )
+                return
+            await interaction.response.send_modal(
+                EmbedBodyModal(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error opening Body modal: {e}")
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
 
     @discord.ui.button(label="Add Field", style=discord.ButtonStyle.primary, row=0)
     async def add_field(self, interaction: discord.Interaction, button: Button):
-        if len(self.embed.fields) >= 25:
-            await interaction.response.send_message(
-                "Maximum 25 fields per embed!",
-                ephemeral=True
+        try:
+            if len(self.embed.fields) >= 25:
+                await interaction.response.send_message(
+                    "Maximum 25 fields per embed!",
+                    ephemeral=True
+                )
+                return
+            await interaction.response.send_modal(
+                EmbedFieldModal(self.state, self.embed_index)
             )
-            return
-        await interaction.response.send_modal(
-            EmbedFieldModal(self.state, self.embed_index)
-        )
+        except Exception as e:
+            logger.error(f"Error opening Field modal: {e}")
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
 
     @discord.ui.button(label="Images", style=discord.ButtonStyle.secondary, row=1)
     async def set_images(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(
-            EmbedImagesModal(self.state, self.embed_index)
-        )
+        try:
+            await interaction.response.send_modal(
+                EmbedImagesModal(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error opening Images modal: {e}")
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
 
     @discord.ui.button(label="Footer", style=discord.ButtonStyle.secondary, row=1)
     async def set_footer(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(
-            EmbedFooterModal(self.state, self.embed_index)
-        )
+        try:
+            await interaction.response.send_modal(
+                EmbedFooterModal(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error opening Footer modal: {e}")
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
 
     @discord.ui.button(label="View Fields", style=discord.ButtonStyle.secondary, row=1)
     async def view_fields(self, interaction: discord.Interaction, button: Button):
