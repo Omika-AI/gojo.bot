@@ -202,6 +202,29 @@ def is_valid_url(url: str) -> bool:
     return bool(pattern.match(url))
 
 
+def fix_url(url: str) -> Optional[str]:
+    """
+    Fix a URL by adding https:// if missing.
+    Returns None if empty, the fixed URL otherwise.
+    """
+    if not url or not url.strip():
+        return None
+
+    url = url.strip()
+
+    # If it already has a scheme, return as-is
+    if url.startswith('http://') or url.startswith('https://'):
+        return url
+
+    # If it looks like a domain, add https://
+    # Check if it looks like a domain (has a dot and no spaces)
+    if '.' in url and ' ' not in url:
+        return f"https://{url}"
+
+    # Return as-is and let Discord validate it
+    return url
+
+
 # =============================================================================
 # MODALS
 # =============================================================================
@@ -290,21 +313,31 @@ class ProfileModal(Modal):
         self.add_item(self.avatar_url)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Validate avatar URL if provided
-        if self.avatar_url.value and not is_valid_url(self.avatar_url.value):
+        try:
+            self.state.display_name = self.display_name.value or None
+            # Fix URL by adding https:// if missing
+            self.state.avatar_url = fix_url(self.avatar_url.value)
+
+            await interaction.response.edit_message(
+                content=self._get_status_message(),
+                view=WebhookBuilderView(interaction.user.id)
+            )
+        except Exception as e:
+            logger.error(f"Error in ProfileModal: {e}")
             await interaction.response.send_message(
-                "Invalid avatar URL! Please enter a valid URL starting with http:// or https://",
+                f"An error occurred: {e}",
                 ephemeral=True
             )
-            return
 
-        self.state.display_name = self.display_name.value or None
-        self.state.avatar_url = self.avatar_url.value or None
-
-        await interaction.response.edit_message(
-            content=self._get_status_message(),
-            view=WebhookBuilderView(interaction.user.id)
-        )
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in ProfileModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
     def _get_status_message(self) -> str:
         parts = ["**Webhook Message Builder**\n"]
@@ -408,14 +441,32 @@ class EmbedAuthorModal(Modal):
         self.add_item(self.author_icon)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.author_name = self.author_name.value or None
-        self.embed.author_url = self.author_url.value or None
-        self.embed.author_icon_url = self.author_icon.value or None
+        try:
+            self.embed.author_name = self.author_name.value or None
+            # Fix URLs by adding https:// if missing
+            self.embed.author_url = fix_url(self.author_url.value)
+            self.embed.author_icon_url = fix_url(self.author_icon.value)
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
-            view=EmbedBuilderView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
+                view=EmbedBuilderView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EmbedAuthorModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EmbedAuthorModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EmbedBodyModal(Modal):
@@ -466,15 +517,33 @@ class EmbedBodyModal(Modal):
         self.add_item(self.color)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.title = self.title.value or None
-        self.embed.description = self.description.value or None
-        self.embed.url = self.url.value or None
-        self.embed.color = parse_color(self.color.value)
+        try:
+            self.embed.title = self.title.value or None
+            self.embed.description = self.description.value or None
+            # Fix URL by adding https:// if missing
+            self.embed.url = fix_url(self.url.value)
+            self.embed.color = parse_color(self.color.value)
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
-            view=EmbedBuilderView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
+                view=EmbedBuilderView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EmbedBodyModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EmbedBodyModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EmbedFieldModal(Modal):
@@ -564,13 +633,31 @@ class EmbedImagesModal(Modal):
         self.add_item(self.image)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.thumbnail_url = self.thumbnail.value or None
-        self.embed.image_url = self.image.value or None
+        try:
+            # Fix URLs by adding https:// if missing
+            self.embed.thumbnail_url = fix_url(self.thumbnail.value)
+            self.embed.image_url = fix_url(self.image.value)
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
-            view=EmbedBuilderView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
+                view=EmbedBuilderView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EmbedImagesModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EmbedImagesModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EmbedFooterModal(Modal):
@@ -611,14 +698,32 @@ class EmbedFooterModal(Modal):
         self.add_item(self.timestamp)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.footer_text = self.footer_text.value or None
-        self.embed.footer_icon_url = self.footer_icon.value or None
-        self.embed.timestamp = self.timestamp.value.lower() in ("yes", "y", "true", "1")
+        try:
+            self.embed.footer_text = self.footer_text.value or None
+            # Fix URL by adding https:// if missing
+            self.embed.footer_icon_url = fix_url(self.footer_icon.value)
+            self.embed.timestamp = self.timestamp.value.lower() in ("yes", "y", "true", "1")
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
-            view=EmbedBuilderView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**\n{self.embed.get_summary()}",
+                view=EmbedBuilderView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EmbedFooterModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EmbedFooterModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 # =============================================================================

@@ -22,7 +22,8 @@ from commands.webhook import (
     EmbedData,
     FieldData,
     parse_color,
-    is_valid_url
+    is_valid_url,
+    fix_url
 )
 
 
@@ -157,13 +158,30 @@ class EditContentModal(Modal):
         self.add_item(self.content)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.state.content = self.content.value
-        self.state.has_changes = True
+        try:
+            self.state.content = self.content.value
+            self.state.has_changes = True
 
-        await interaction.response.edit_message(
-            content=get_edit_status(self.state),
-            view=WebhookEditView(self.state)
-        )
+            await interaction.response.edit_message(
+                content=get_edit_status(self.state),
+                view=WebhookEditView(self.state)
+            )
+        except Exception as e:
+            logger.error(f"Error in EditContentModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EditContentModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EditEmbedAuthorModal(Modal):
@@ -201,15 +219,33 @@ class EditEmbedAuthorModal(Modal):
         self.add_item(self.author_icon)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.author_name = self.author_name.value or None
-        self.embed.author_url = self.author_url.value or None
-        self.embed.author_icon_url = self.author_icon.value or None
-        self.state.has_changes = True
+        try:
+            self.embed.author_name = self.author_name.value or None
+            # Fix URLs by adding https:// if missing
+            self.embed.author_url = fix_url(self.author_url.value)
+            self.embed.author_icon_url = fix_url(self.author_icon.value)
+            self.state.has_changes = True
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**",
-            view=EditEmbedView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**",
+                view=EditEmbedView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EditEmbedAuthorModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EditEmbedAuthorModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EditEmbedBodyModal(Modal):
@@ -256,16 +292,34 @@ class EditEmbedBodyModal(Modal):
         self.add_item(self.color)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.title = self.title.value or None
-        self.embed.description = self.description.value or None
-        self.embed.url = self.url.value or None
-        self.embed.color = parse_color(self.color.value)
-        self.state.has_changes = True
+        try:
+            self.embed.title = self.title.value or None
+            self.embed.description = self.description.value or None
+            # Fix URL by adding https:// if missing
+            self.embed.url = fix_url(self.url.value)
+            self.embed.color = parse_color(self.color.value)
+            self.state.has_changes = True
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**",
-            view=EditEmbedView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**",
+                view=EditEmbedView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EditEmbedBodyModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EditEmbedBodyModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EditEmbedFieldModal(Modal):
@@ -302,26 +356,43 @@ class EditEmbedFieldModal(Modal):
         self.add_item(self.inline)
 
     async def on_submit(self, interaction: discord.Interaction):
-        if len(self.embed.fields) >= 25:
+        try:
+            if len(self.embed.fields) >= 25:
+                await interaction.response.send_message(
+                    "Maximum 25 fields per embed!",
+                    ephemeral=True
+                )
+                return
+
+            inline = self.inline.value.lower() in ("yes", "y", "true", "1")
+
+            self.embed.fields.append(FieldData(
+                name=self.field_name.value,
+                value=self.field_value.value,
+                inline=inline
+            ))
+            self.state.has_changes = True
+
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}** - Fields: {len(self.embed.fields)}",
+                view=EditEmbedView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EditEmbedFieldModal: {e}")
             await interaction.response.send_message(
-                "Maximum 25 fields per embed!",
+                f"An error occurred: {e}",
                 ephemeral=True
             )
-            return
 
-        inline = self.inline.value.lower() in ("yes", "y", "true", "1")
-
-        self.embed.fields.append(FieldData(
-            name=self.field_name.value,
-            value=self.field_value.value,
-            inline=inline
-        ))
-        self.state.has_changes = True
-
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}** - Fields: {len(self.embed.fields)}",
-            view=EditEmbedView(self.state, self.embed_index)
-        )
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EditEmbedFieldModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EditEmbedImagesModal(Modal):
@@ -351,14 +422,32 @@ class EditEmbedImagesModal(Modal):
         self.add_item(self.image)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.thumbnail_url = self.thumbnail.value or None
-        self.embed.image_url = self.image.value or None
-        self.state.has_changes = True
+        try:
+            # Fix URLs by adding https:// if missing
+            self.embed.thumbnail_url = fix_url(self.thumbnail.value)
+            self.embed.image_url = fix_url(self.image.value)
+            self.state.has_changes = True
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**",
-            view=EditEmbedView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**",
+                view=EditEmbedView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EditEmbedImagesModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EditEmbedImagesModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class EditEmbedFooterModal(Modal):
@@ -396,15 +485,33 @@ class EditEmbedFooterModal(Modal):
         self.add_item(self.timestamp)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.embed.footer_text = self.footer_text.value or None
-        self.embed.footer_icon_url = self.footer_icon.value or None
-        self.embed.timestamp = self.timestamp.value.lower() in ("yes", "y", "true", "1")
-        self.state.has_changes = True
+        try:
+            self.embed.footer_text = self.footer_text.value or None
+            # Fix URL by adding https:// if missing
+            self.embed.footer_icon_url = fix_url(self.footer_icon.value)
+            self.embed.timestamp = self.timestamp.value.lower() in ("yes", "y", "true", "1")
+            self.state.has_changes = True
 
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {self.embed_index + 1}**",
-            view=EditEmbedView(self.state, self.embed_index)
-        )
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {self.embed_index + 1}**",
+                view=EditEmbedView(self.state, self.embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in EditEmbedFooterModal: {e}")
+            await interaction.response.send_message(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in EditEmbedFooterModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 class NewEmbedModal(Modal):
@@ -439,27 +546,44 @@ class NewEmbedModal(Modal):
         self.add_item(self.color)
 
     async def on_submit(self, interaction: discord.Interaction):
-        if len(self.state.embeds) >= 10:
+        try:
+            if len(self.state.embeds) >= 10:
+                await interaction.response.send_message(
+                    "Maximum 10 embeds per message!",
+                    ephemeral=True
+                )
+                return
+
+            new_embed = EmbedData(
+                title=self.title.value or None,
+                description=self.description.value or None,
+                color=parse_color(self.color.value)
+            )
+
+            self.state.embeds.append(new_embed)
+            self.state.has_changes = True
+            embed_index = len(self.state.embeds) - 1
+
+            await interaction.response.edit_message(
+                content=f"**Editing Embed {embed_index + 1}**\n\nUse the options to configure this embed.",
+                view=EditEmbedView(self.state, embed_index)
+            )
+        except Exception as e:
+            logger.error(f"Error in NewEmbedModal: {e}")
             await interaction.response.send_message(
-                "Maximum 10 embeds per message!",
+                f"An error occurred: {e}",
                 ephemeral=True
             )
-            return
 
-        new_embed = EmbedData(
-            title=self.title.value or None,
-            description=self.description.value or None,
-            color=parse_color(self.color.value)
-        )
-
-        self.state.embeds.append(new_embed)
-        self.state.has_changes = True
-        embed_index = len(self.state.embeds) - 1
-
-        await interaction.response.edit_message(
-            content=f"**Editing Embed {embed_index + 1}**\n\nUse the options to configure this embed.",
-            view=EditEmbedView(self.state, embed_index)
-        )
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal error in NewEmbedModal: {error}")
+        try:
+            await interaction.response.send_message(
+                "Something went wrong! Please try again.",
+                ephemeral=True
+            )
+        except:
+            pass
 
 
 # =============================================================================
