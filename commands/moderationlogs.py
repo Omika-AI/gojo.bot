@@ -533,9 +533,9 @@ class ModerationLogs(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="clearlogs", description="Clear all moderation logs (Administrator only)")
+    @app_commands.command(name="clearlogs", description="Clear all moderation logs (Server Owner only)")
     async def clearlogs(self, interaction: discord.Interaction):
-        """Clear all moderation logs - Admin only"""
+        """Clear all moderation logs - Server Owner only"""
         log_command(
             user=str(interaction.user),
             user_id=interaction.user.id,
@@ -551,10 +551,10 @@ class ModerationLogs(commands.Cog):
             )
             return
 
-        # Admin only
-        if not interaction.user.guild_permissions.administrator:
+        # Server Owner only
+        if interaction.user.id != interaction.guild.owner_id:
             await interaction.response.send_message(
-                "You need **Administrator** permission to clear logs!",
+                "Only the **Server Owner** can clear moderation logs!",
                 ephemeral=True
             )
             return
