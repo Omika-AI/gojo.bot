@@ -4,7 +4,7 @@ Displays bot information, features, and available commands
 Shows only commands the user has permission to use
 
 IMPORTANT: Update this file when adding new commands!
-Last updated: 2025-12-29
+Last updated: 2026-01-02
 """
 
 import discord
@@ -155,6 +155,41 @@ COMMANDS_REGISTRY = [
         "category": "moderation",
         "permission": "manage_messages"
     },
+    {
+        "name": "/modtalk",
+        "description": "Send a message as the bot in any channel",
+        "usage": "/modtalk",
+        "category": "moderation",
+        "permission": "manage_messages"
+    },
+    {
+        "name": "/moderationlogs",
+        "description": "View all moderation actions with filters",
+        "usage": "/moderationlogs or /moderationlogs @user",
+        "category": "moderation",
+        "permission": "manage_messages"
+    },
+    {
+        "name": "/modstats",
+        "description": "View moderation statistics and top moderators",
+        "usage": "/modstats",
+        "category": "moderation",
+        "permission": "manage_messages"
+    },
+    {
+        "name": "/userhistory",
+        "description": "View a user's moderation history",
+        "usage": "/userhistory @user",
+        "category": "moderation",
+        "permission": "manage_messages"
+    },
+    {
+        "name": "/modactivity",
+        "description": "View a moderator's action history",
+        "usage": "/modactivity or /modactivity @moderator",
+        "category": "moderation",
+        "permission": "manage_messages"
+    },
 
     # Admin Commands (Require administrator)
     {
@@ -163,6 +198,29 @@ COMMANDS_REGISTRY = [
         "usage": "/adminprofile @user",
         "category": "admin",
         "permission": "administrator"
+    },
+    {
+        "name": "/webhook",
+        "description": "Create and send webhook messages with embeds",
+        "usage": "/webhook",
+        "category": "admin",
+        "permission": "administrator"
+    },
+    {
+        "name": "/webhookedit",
+        "description": "Edit an existing webhook message",
+        "usage": "/webhookedit <message_link>",
+        "category": "admin",
+        "permission": "administrator"
+    },
+
+    # Owner Commands (Server Owner only)
+    {
+        "name": "/clearlogs",
+        "description": "Clear all moderation logs (Server Owner only)",
+        "usage": "/clearlogs",
+        "category": "owner",
+        "permission": "administrator"  # We check for owner in the command itself
     },
 ]
 
@@ -192,6 +250,11 @@ CATEGORY_INFO = {
         "name": "Admin Commands",
         "emoji": "👑",
         "description": "Powerful tools for administrators"
+    },
+    "owner": {
+        "name": "Owner Commands",
+        "emoji": "🔐",
+        "description": "Exclusive commands for the server owner"
     }
 }
 
@@ -230,7 +293,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category with commands
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "music", "moderation", "admin"]
+            cat for cat in ["general", "fun", "music", "moderation", "admin", "owner"]
             if cat in self.accessible_commands
         ]
         self.total_pages = 2 + len(self.categories_with_commands)
@@ -346,7 +409,9 @@ class InformationView(View):
             value=(
                 "• **Timeout System** - Temporarily mute disruptive users\n"
                 "• **Warning System** - Track user warnings with severity levels\n"
-                "• **Warning History** - View complete warning records\n"
+                "• **Moderation Logs** - Track all mod actions with filters\n"
+                "• **Mod Activity** - View what actions moderators have taken\n"
+                "• **ModTalk** - Send messages as the bot\n"
                 "• **Admin Profiles** - Detailed member stats and permissions"
             ),
             inline=False
@@ -379,6 +444,7 @@ class InformationView(View):
         embed.add_field(
             name="🔧 Utilities",
             value=(
+                "• **Webhook Manager** - Create and edit webhook messages with embeds\n"
                 "• **Server Stats** - Track member join positions and activity\n"
                 "• **Permission Viewer** - See what permissions users have\n"
                 "• **Role Information** - View role details and hierarchies"
@@ -447,8 +513,10 @@ class InformationView(View):
         colors = {
             "general": discord.Color.blue(),
             "fun": discord.Color.gold(),
+            "music": discord.Color.green(),
             "moderation": discord.Color.orange(),
-            "admin": discord.Color.red()
+            "admin": discord.Color.red(),
+            "owner": discord.Color.dark_red()
         }
         return colors.get(category, discord.Color.blurple())
 
