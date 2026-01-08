@@ -64,8 +64,8 @@ COMMANDS_REGISTRY = [
     # Music Commands (Everyone can use)
     {
         "name": "/play",
-        "description": "Play a song from YouTube, SoundCloud, or Spotify",
-        "usage": "/play query:song name source:YouTube OR /play query:<soundcloud link>",
+        "description": "Play a song from SoundCloud",
+        "usage": "/play query:song name OR /play query:<soundcloud link>",
         "category": "music",
         "permission": None
     },
@@ -266,8 +266,8 @@ CATEGORY_INFO = {
     },
     "music": {
         "name": "Music Commands",
-        "emoji": "🎵",
-        "description": "Play music from Spotify in voice channels"
+        "emoji": "🔊",
+        "description": "Play music from SoundCloud in voice channels"
     },
     "moderation": {
         "name": "Moderation Commands",
@@ -475,11 +475,11 @@ class InformationView(View):
 
         # Music Features
         embed.add_field(
-            name="🎵 Music System",
+            name="🔊 Music System",
             value=(
-                "• **Multi-Platform** - YouTube, SoundCloud, and Spotify support\n"
+                "• **SoundCloud Integration** - Search and play from SoundCloud\n"
                 "• **Search & Play** - Search for any song by name\n"
-                "• **Direct Links** - Paste YouTube or SoundCloud URLs\n"
+                "• **Direct Links** - Paste SoundCloud URLs directly\n"
                 "• **Queue System** - Queue up multiple songs\n"
                 "• **Playback Controls** - Pause, resume, skip, shuffle\n"
                 "• **Volume Control** - Adjust volume as needed"
