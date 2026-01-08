@@ -238,8 +238,8 @@ COMMANDS_REGISTRY = [
     },
     {
         "name": "/searchlogs",
-        "description": "Search event logs with filters (Server Owner only)",
-        "usage": "/searchlogs OR /searchlogs @user OR /searchlogs category:messages",
+        "description": "Search event logs with text, user, or category filters (Server Owner only)",
+        "usage": "/searchlogs search_text:badword OR /searchlogs user:@someone category:messages",
         "category": "owner",
         "permission": "administrator"
     },
@@ -319,12 +319,13 @@ class InformationView(View):
         self.accessible_commands = get_user_commands(user)
 
         # Calculate total pages based on accessible categories
-        # Page 1: About, Page 2: Features, then one page per category with commands
+        # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
             cat for cat in ["general", "fun", "music", "moderation", "admin", "owner"]
             if cat in self.accessible_commands
         ]
-        self.total_pages = 2 + len(self.categories_with_commands)
+        # +3 for About, Features, and Credits pages
+        self.total_pages = 3 + len(self.categories_with_commands)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Only allow the original user to use the buttons"""
@@ -342,8 +343,11 @@ class InformationView(View):
             return self._build_about_embed()
         elif self.current_page == 2:
             return self._build_features_embed()
+        elif self.current_page == self.total_pages:
+            # Last page is Credits
+            return self._build_credits_embed()
         else:
-            # Pages 3+ are command categories
+            # Pages 3 to (total-1) are command categories
             category_index = self.current_page - 3
             if 0 <= category_index < len(self.categories_with_commands):
                 category = self.categories_with_commands[category_index]
@@ -411,7 +415,8 @@ class InformationView(View):
             value=(
                 "Use the **Previous** and **Next** buttons below to browse:\n"
                 "• **Page 2:** Features Overview\n"
-                "• **Page 3+:** Command Categories"
+                "• **Page 3+:** Command Categories\n"
+                f"• **Page {self.total_pages}:** Credits"
             ),
             inline=False
         )
@@ -560,6 +565,65 @@ class InformationView(View):
             "owner": discord.Color.dark_red()
         }
         return colors.get(category, discord.Color.blurple())
+
+    def _build_credits_embed(self) -> discord.Embed:
+        """Build the credits embed (Last Page)"""
+        embed = discord.Embed(
+            title="Credits",
+            description=f"**Page {self.total_pages}/{self.total_pages}** - The Team Behind {config.BOT_NAME}",
+            color=discord.Color.purple()
+        )
+
+        if self.bot.user:
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+
+        # Developer
+        embed.add_field(
+            name="Developer",
+            value=(
+                "**Fengus**\n"
+                "Lead developer responsible for building and maintaining "
+                f"all of {config.BOT_NAME}'s features and functionality."
+            ),
+            inline=False
+        )
+
+        # Owner/Overseer
+        embed.add_field(
+            name="Owner & Overseer",
+            value=(
+                "**Frederik \"NaCly\"**\n"
+                "Owner of **Omika AI** and project overseer.\n"
+                f"{config.BOT_NAME} is developed under the Omika AI umbrella."
+            ),
+            inline=False
+        )
+
+        # Project Info
+        embed.add_field(
+            name="About the Project",
+            value=(
+                f"**{config.BOT_NAME}** is a project developed under **Omika AI**.\n\n"
+                "Named after the strongest sorcerer from Jujutsu Kaisen, "
+                "this bot aims to provide powerful moderation, logging, "
+                "and entertainment features for Discord servers."
+            ),
+            inline=False
+        )
+
+        # Special Thanks
+        embed.add_field(
+            name="Special Thanks",
+            value=(
+                "Thank you to everyone who uses and supports this bot!\n"
+                "Your feedback helps make it better every day."
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text=f"Requested by {self.user} • {config.BOT_NAME} v{config.BOT_VERSION}")
+
+        return embed
 
     def update_buttons(self):
         """Update button states based on current page"""
