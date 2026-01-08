@@ -393,114 +393,116 @@ class LyricsButton(Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Send lyrics when button is clicked"""
-        # Try to fetch lyrics if not already fetched
-        if not self.song.lyrics_fetched:
+        try:
+            logger.debug(f"Lyrics button clicked for: {self.song.title}")
+            logger.debug(f"lyrics_fetched: {self.song.lyrics_fetched}, lyrics: {self.song.lyrics is not None}, url: {self.song.lyrics_url}")
+
+            # Always defer first to give us time
             await interaction.response.defer(ephemeral=True, thinking=True)
-            await self.song.fetch_lyrics_async()
 
-        # Check what we got back
-        has_lyrics = self.song.lyrics is not None
-        has_url = self.song.lyrics_url is not None
+            # Try to fetch lyrics if not already fetched
+            if not self.song.lyrics_fetched:
+                await self.song.fetch_lyrics_async()
 
-        # Case 1: No lyrics and no URL found
-        if not has_lyrics and not has_url:
-            msg = f"Could not find lyrics for **{self.song.title}** by **{self.song.artist}**.\n"
-            msg += "This could be because:\n"
-            msg += "- The song is an instrumental\n"
-            msg += "- The lyrics aren't in the Genius database\n"
-            msg += "- The artist/title name differs from the original"
+            # Check what we got back
+            has_lyrics = self.song.lyrics is not None
+            has_url = self.song.lyrics_url is not None
 
-            if interaction.response.is_done():
+            logger.debug(f"After fetch - has_lyrics: {has_lyrics}, has_url: {has_url}, url: {self.song.lyrics_url}")
+
+            # Case 1: No lyrics and no URL found
+            if not has_lyrics and not has_url:
+                msg = f"Could not find lyrics for **{self.song.title}** by **{self.song.artist}**.\n"
+                msg += "This could be because:\n"
+                msg += "- The song is an instrumental\n"
+                msg += "- The lyrics aren't in the Genius database\n"
+                msg += "- The artist/title name differs from the original"
                 await interaction.followup.send(msg, ephemeral=True)
-            else:
-                await interaction.response.send_message(msg, ephemeral=True)
-            return
+                return
 
-        # Case 2: URL found but couldn't scrape lyrics - send link only
-        if not has_lyrics and has_url:
-            embed = discord.Embed(
-                title=f"Lyrics: {self.song.title}",
-                description=f"Couldn't load lyrics directly, but you can view them on Genius:",
-                color=discord.Color.orange()
-            )
-            embed.add_field(
-                name="View on Genius",
-                value=f"[Click here to see lyrics]({self.song.lyrics_url})",
-                inline=False
-            )
-            embed.set_footer(text=f"Artist: {self.song.artist}")
-
-            if interaction.response.is_done():
-                await interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        # Case 3: Have lyrics - display them with URL reference
-        lyrics = self.song.lyrics
-
-        # Build footer with Genius link
-        footer_text = f"Artist: {self.song.artist}"
-
-        # Discord has a 2000 character limit for embeds
-        # Reserve space for the Genius link at the bottom
-        genius_link = f"\n\n[View on Genius]({self.song.lyrics_url})" if has_url else ""
-        max_lyrics_length = 1800 - len(genius_link)
-
-        if len(lyrics) <= max_lyrics_length:
-            # Fits in one embed
-            embed = discord.Embed(
-                title=f"Lyrics: {self.song.title}",
-                description=lyrics + genius_link,
-                color=discord.Color.orange()
-            )
-            embed.set_footer(text=footer_text)
-
-            if interaction.response.is_done():
-                await interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            # Split into multiple embeds for long lyrics
-            chunks = [lyrics[i:i+1800] for i in range(0, len(lyrics), 1800)]
-
-            # First embed with title
-            first_embed = discord.Embed(
-                title=f"Lyrics: {self.song.title}",
-                description=chunks[0],
-                color=discord.Color.orange()
-            )
-
-            if interaction.response.is_done():
-                await interaction.followup.send(embed=first_embed, ephemeral=True)
-            else:
-                await interaction.response.send_message(embed=first_embed, ephemeral=True)
-
-            # Middle chunks
-            for chunk in chunks[1:-1]:
+            # Case 2: URL found but couldn't scrape lyrics - send link only
+            if not has_lyrics and has_url:
                 embed = discord.Embed(
-                    description=chunk,
+                    title=f"Lyrics: {self.song.title}",
+                    description=f"Couldn't load lyrics directly, but you can view them on Genius:",
                     color=discord.Color.orange()
                 )
+                embed.add_field(
+                    name="View on Genius",
+                    value=f"[Click here to see lyrics]({self.song.lyrics_url})",
+                    inline=False
+                )
+                embed.set_footer(text=f"Artist: {self.song.artist}")
                 await interaction.followup.send(embed=embed, ephemeral=True)
+                return
 
-            # Last chunk with Genius link
-            last_chunk = chunks[-1] if len(chunks) > 1 else ""
-            if last_chunk:
-                last_embed = discord.Embed(
-                    description=last_chunk + genius_link,
+            # Case 3: Have lyrics - display them with URL reference
+            lyrics = self.song.lyrics
+
+            # Build footer with Genius link
+            footer_text = f"Artist: {self.song.artist}"
+
+            # Discord has a 2000 character limit for embeds
+            # Reserve space for the Genius link at the bottom
+            genius_link = f"\n\n[View on Genius]({self.song.lyrics_url})" if has_url else ""
+            max_lyrics_length = 1800 - len(genius_link)
+
+            if len(lyrics) <= max_lyrics_length:
+                # Fits in one embed
+                embed = discord.Embed(
+                    title=f"Lyrics: {self.song.title}",
+                    description=lyrics + genius_link,
                     color=discord.Color.orange()
                 )
-                last_embed.set_footer(text=footer_text)
-                await interaction.followup.send(embed=last_embed, ephemeral=True)
-            elif genius_link:
-                # Just send the link in a final embed
-                link_embed = discord.Embed(
-                    description=genius_link,
+                embed.set_footer(text=footer_text)
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                # Split into multiple embeds for long lyrics
+                chunks = [lyrics[i:i+1800] for i in range(0, len(lyrics), 1800)]
+
+                # First embed with title
+                first_embed = discord.Embed(
+                    title=f"Lyrics: {self.song.title}",
+                    description=chunks[0],
                     color=discord.Color.orange()
                 )
-                link_embed.set_footer(text=footer_text)
-                await interaction.followup.send(embed=link_embed, ephemeral=True)
+                await interaction.followup.send(embed=first_embed, ephemeral=True)
+
+                # Middle chunks
+                for chunk in chunks[1:-1]:
+                    embed = discord.Embed(
+                        description=chunk,
+                        color=discord.Color.orange()
+                    )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+
+                # Last chunk with Genius link
+                last_chunk = chunks[-1] if len(chunks) > 1 else ""
+                if last_chunk:
+                    last_embed = discord.Embed(
+                        description=last_chunk + genius_link,
+                        color=discord.Color.orange()
+                    )
+                    last_embed.set_footer(text=footer_text)
+                    await interaction.followup.send(embed=last_embed, ephemeral=True)
+                elif genius_link:
+                    # Just send the link in a final embed
+                    link_embed = discord.Embed(
+                        description=genius_link,
+                        color=discord.Color.orange()
+                    )
+                    link_embed.set_footer(text=footer_text)
+                    await interaction.followup.send(embed=link_embed, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error in lyrics button callback: {e}")
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(f"An error occurred while fetching lyrics: {e}", ephemeral=True)
+                else:
+                    await interaction.response.send_message(f"An error occurred while fetching lyrics: {e}", ephemeral=True)
+            except:
+                pass
 
 
 # =============================================================================

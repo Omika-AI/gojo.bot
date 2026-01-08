@@ -113,14 +113,14 @@ COMMANDS_REGISTRY = [
     },
     {
         "name": "/queue",
-        "description": "View the current music queue",
+        "description": "View the music queue with remove buttons",
         "usage": "/queue",
         "category": "music",
         "permission": None
     },
     {
         "name": "/nowplaying",
-        "description": "Show details about the current song",
+        "description": "Show current song with Lyrics button (Genius integration)",
         "usage": "/nowplaying",
         "category": "music",
         "permission": None
@@ -450,34 +450,28 @@ class InformationView(View):
         if self.bot.user:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
-        # Moderation Features
+        # Check user permissions for conditional features display
+        perms = self.user.guild_permissions
+        is_mod = perms.manage_messages or perms.moderate_members
+        is_admin = perms.administrator
+        is_owner = self.user.id == self.user.guild.owner_id
+
+        # Music Features (Everyone)
         embed.add_field(
-            name="🛡️ Moderation System",
+            name="🔊 Music System",
             value=(
-                "• **Timeout System** - Temporarily mute disruptive users\n"
-                "• **Warning System** - Track user warnings with severity levels\n"
-                "• **Moderation Logs** - Track all mod actions with filters\n"
-                "• **Mod Activity** - View what actions moderators have taken\n"
-                "• **ModTalk** - Send messages as the bot\n"
-                "• **Admin Profiles** - Detailed member stats and permissions"
+                "• **SoundCloud Integration** - Search and play from SoundCloud\n"
+                "• **Search & Play** - Search for any song by name\n"
+                "• **Direct Links** - Paste SoundCloud URLs directly\n"
+                "• **Queue System** - Queue up multiple songs with remove buttons\n"
+                "• **Playback Controls** - Pause, resume, skip, shuffle\n"
+                "• **Volume Control** - Adjust volume as needed\n"
+                "• **Lyrics** - View song lyrics via Genius integration"
             ),
             inline=False
         )
 
-        # Event Logging Features
-        embed.add_field(
-            name="📋 Event Logging System",
-            value=(
-                "• **Comprehensive Logs** - Track message edits/deletes, member activity, voice events\n"
-                "• **Webhook Delivery** - Logs sent via webhook to a dedicated channel\n"
-                "• **Before/After** - See what changed in edits\n"
-                "• **Searchable** - Search logs by user, category, or text\n"
-                "• **30-Day Retention** - Automatic cleanup of old logs"
-            ),
-            inline=False
-        )
-
-        # Fun Features
+        # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
             value=(
@@ -487,31 +481,46 @@ class InformationView(View):
             inline=False
         )
 
-        # Music Features
-        embed.add_field(
-            name="🔊 Music System",
-            value=(
-                "• **SoundCloud Integration** - Search and play from SoundCloud\n"
-                "• **Search & Play** - Search for any song by name\n"
-                "• **Direct Links** - Paste SoundCloud URLs directly\n"
-                "• **Queue System** - Queue up multiple songs\n"
-                "• **Playback Controls** - Pause, resume, skip, shuffle\n"
-                "• **Volume Control** - Adjust volume as needed"
-            ),
-            inline=False
-        )
+        # Moderation Features (Mods/Admins only)
+        if is_mod or is_admin:
+            embed.add_field(
+                name="🛡️ Moderation System",
+                value=(
+                    "• **Moderation Panel** - All-in-one panel for kick, ban, timeout, warn\n"
+                    "• **Timeout System** - Temporarily mute disruptive users\n"
+                    "• **Warning System** - Track user warnings with severity levels\n"
+                    "• **Moderation Logs** - Track all mod actions with filters\n"
+                    "• **Mod Activity** - View what actions moderators have taken\n"
+                    "• **User History** - View a user's complete moderation history\n"
+                    "• **ModTalk** - Send messages as the bot in any channel"
+                ),
+                inline=False
+            )
 
-        # Utility Features
-        embed.add_field(
-            name="🔧 Utilities",
-            value=(
-                "• **Webhook Manager** - Create and edit webhook messages with embeds\n"
-                "• **Server Stats** - Track member join positions and activity\n"
-                "• **Permission Viewer** - See what permissions users have\n"
-                "• **Role Information** - View role details and hierarchies"
-            ),
-            inline=False
-        )
+        # Admin Features (Admins only)
+        if is_admin:
+            embed.add_field(
+                name="👑 Admin Tools",
+                value=(
+                    "• **Admin Profiles** - Detailed member stats, permissions, and warnings\n"
+                    "• **Webhook Manager** - Create and edit webhook messages with embeds\n"
+                    "• **Mod Statistics** - View top moderators and action counts"
+                ),
+                inline=False
+            )
+
+        # Owner Features (Owner only)
+        if is_owner:
+            embed.add_field(
+                name="🔐 Owner Tools",
+                value=(
+                    "• **Event Logging** - Comprehensive server event logging via webhooks\n"
+                    "• **Log Search** - Search logs by user, category, or text\n"
+                    "• **Log Statistics** - View logging stats and event counts\n"
+                    "• **Clear Logs** - Clear moderation logs when needed"
+                ),
+                inline=False
+            )
 
         # Coming Soon
         embed.add_field(
