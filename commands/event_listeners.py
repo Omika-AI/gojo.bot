@@ -51,6 +51,48 @@ class EventListeners(commands.Cog):
         """Wait until bot is ready before starting cleanup task"""
         await self.bot.wait_until_ready()
 
+    # ==================== COMMAND EVENTS ====================
+
+    def _get_user_type(self, member: discord.Member) -> str:
+        """Determine the user type based on permissions"""
+        if member.id == member.guild.owner_id:
+            return "Owner"
+        elif member.guild_permissions.administrator:
+            return "Admin"
+        elif member.guild_permissions.manage_messages or member.guild_permissions.moderate_members:
+            return "Moderator"
+        else:
+            return "Member"
+
+    @commands.Cog.listener()
+    async def on_app_command_completion(
+        self,
+        interaction: discord.Interaction,
+        command: discord.app_commands.Command
+    ):
+        """Log slash command usage"""
+        # Skip if no guild (DMs)
+        if not interaction.guild:
+            return
+
+        # Skip if logging not enabled for commands
+        if not is_logging_enabled(interaction.guild.id, "commands"):
+            return
+
+        try:
+            # Get the user type
+            user_type = self._get_user_type(interaction.user)
+
+            await self.event_logger.log_command_use(
+                guild_id=interaction.guild.id,
+                user=interaction.user,
+                command_name=command.name,
+                channel=interaction.channel,
+                user_type=user_type
+            )
+        except Exception as e:
+            logger.error(f"Error logging command usage: {e}")
+
     # ==================== MESSAGE EVENTS ====================
 
     @commands.Cog.listener()

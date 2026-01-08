@@ -766,3 +766,67 @@ class EventLogger:
             ],
             color=after.color.value if after.color.value != 0 else 0xFFA500
         )
+
+    # ==================== COMMAND EVENTS ====================
+
+    async def log_command_use(
+        self,
+        guild_id: int,
+        user: discord.User,
+        command_name: str,
+        channel: discord.TextChannel,
+        user_type: str = "Member"
+    ) -> bool:
+        """
+        Log command usage
+
+        Args:
+            guild_id: The server ID
+            user: The user who used the command
+            command_name: Name of the command used
+            channel: Channel where command was used
+            user_type: Type of user (Member, Moderator, Admin, Owner)
+
+        Returns:
+            True if logged successfully
+        """
+        # Color based on user type
+        type_colors = {
+            "Owner": 0xFF0000,       # Red
+            "Admin": 0xE74C3C,       # Dark Red
+            "Moderator": 0xF39C12,   # Orange
+            "Member": 0x00CED1       # Cyan
+        }
+        color = type_colors.get(user_type, 0x00CED1)
+
+        # Emoji based on user type
+        type_emojis = {
+            "Owner": "\U0001f451",    # Crown
+            "Admin": "\U0001f6e1\ufe0f",  # Shield
+            "Moderator": "\U0001f6e0\ufe0f",  # Hammer and wrench
+            "Member": "\U0001f464"    # Bust
+        }
+        type_emoji = type_emojis.get(user_type, "\U0001f464")
+
+        return await self.send_log(
+            guild_id=guild_id,
+            category="commands",
+            event_type="command_use",
+            title="Command Used",
+            description=f"{user.mention} used `/{command_name}`",
+            user_id=user.id,
+            user_name=str(user),
+            user_avatar_url=user.display_avatar.url if user.display_avatar else None,
+            channel_id=channel.id,
+            channel_name=channel.name,
+            fields=[
+                {"name": "Command", "value": f"`/{command_name}`", "inline": True},
+                {"name": "User Type", "value": f"{type_emoji} {user_type}", "inline": True},
+                {"name": "Channel", "value": channel.mention, "inline": True}
+            ],
+            details={
+                "command": command_name,
+                "user_type": user_type
+            },
+            color=color
+        )

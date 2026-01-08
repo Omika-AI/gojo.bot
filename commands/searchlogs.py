@@ -299,7 +299,7 @@ class SearchLogs(commands.Cog):
     )
     @app_commands.describe(
         user="Filter logs by a specific user",
-        category="Filter by category (messages, members, voice, server)",
+        category="Filter by category (messages, members, voice, server, commands)",
         query="Search text in log content"
     )
     @app_commands.choices(category=[
@@ -307,6 +307,7 @@ class SearchLogs(commands.Cog):
         app_commands.Choice(name="Members", value="members"),
         app_commands.Choice(name="Voice", value="voice"),
         app_commands.Choice(name="Server", value="server"),
+        app_commands.Choice(name="Commands", value="commands"),
         app_commands.Choice(name="Moderation", value="moderation")
     ])
     async def searchlogs(

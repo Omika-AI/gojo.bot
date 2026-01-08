@@ -25,6 +25,7 @@ class EventCategory(Enum):
     MODERATION = "moderation"
     VOICE = "voice"
     SERVER = "server"
+    COMMANDS = "commands"
     # Future expansion:
     # CHATLOGS = "chatlogs"
     # VOICECHATLOGS = "voicechatlogs"
@@ -70,6 +71,9 @@ EVENT_TYPES = {
         "role_create",
         "role_delete",
         "role_update"
+    ],
+    "commands": [
+        "command_use"
     ]
 }
 
@@ -591,7 +595,10 @@ def format_event_emoji(event_type: str) -> str:
         "timeout_add": "\u23f1\ufe0f",        # Stopwatch
         "timeout_remove": "\u23f1\ufe0f",
         "kick": "\U0001f462",                 # Boot
-        "warn": "\u26a0\ufe0f"                # Warning
+        "warn": "\u26a0\ufe0f",               # Warning
+
+        # Commands
+        "command_use": "\u2699\ufe0f"         # Gear
     }
     return emojis.get(event_type, "\U0001f4cb")  # Default: clipboard
 
@@ -603,6 +610,7 @@ def format_category_color(category: str) -> int:
         "members": 0x3498DB,     # Blue
         "moderation": 0xE74C3C,  # Red
         "voice": 0x9B59B6,       # Purple
-        "server": 0x2ECC71       # Green
+        "server": 0x2ECC71,      # Green
+        "commands": 0x00CED1    # Dark Cyan/Turquoise
     }
     return colors.get(category, 0x95A5A6)  # Default: Gray
