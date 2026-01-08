@@ -1,7 +1,7 @@
 """
 Search Logs Command
 Search through event logs with filters
-Server Owner only - Supports user, category, and text search
+Server Owner and Admins - Supports user, category, and text search
 
 Commands:
 - /searchlogs - Search event logs with text, user, or category filters
@@ -448,7 +448,7 @@ class SearchLogs(commands.Cog):
 
     @app_commands.command(
         name="searchlogs",
-        description="Search event logs (Server Owner only)"
+        description="Search event logs (Owner/Admin only)"
     )
     @app_commands.describe(
         search_text="Search for specific words or sentences in messages (e.g., 'bad word')",
@@ -495,10 +495,13 @@ class SearchLogs(commands.Cog):
             )
             return
 
-        # Check server owner permission
-        if interaction.user.id != interaction.guild.owner_id:
+        # Check server owner or admin permission
+        is_owner = interaction.user.id == interaction.guild.owner_id
+        is_admin = interaction.user.guild_permissions.administrator
+
+        if not is_owner and not is_admin:
             await interaction.response.send_message(
-                "Only the **Server Owner** can search event logs!",
+                "Only the **Server Owner** or **Administrators** can search event logs!",
                 ephemeral=True
             )
             return
@@ -533,7 +536,7 @@ class SearchLogs(commands.Cog):
 
     @app_commands.command(
         name="logstats",
-        description="View event logging statistics (Server Owner only)"
+        description="View event logging statistics (Owner/Admin only)"
     )
     async def logstats(self, interaction: discord.Interaction):
         """View event log statistics"""
@@ -553,10 +556,13 @@ class SearchLogs(commands.Cog):
             )
             return
 
-        # Check server owner permission
-        if interaction.user.id != interaction.guild.owner_id:
+        # Check server owner or admin permission
+        is_owner = interaction.user.id == interaction.guild.owner_id
+        is_admin = interaction.user.guild_permissions.administrator
+
+        if not is_owner and not is_admin:
             await interaction.response.send_message(
-                "Only the **Server Owner** can view log statistics!",
+                "Only the **Server Owner** or **Administrators** can view log statistics!",
                 ephemeral=True
             )
             return
