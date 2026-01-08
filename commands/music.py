@@ -87,16 +87,13 @@ SOUNDCLOUD_ALBUM_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/[^/]+/a
 
 
 # =============================================================================
-# LYRICS FETCHER (Multiple sources)
+# LYRICS FETCHER (Google Search + AI powered)
 # =============================================================================
 
 def _clean_html(text: str) -> str:
     """Clean HTML tags and entities from text"""
-    # Replace <br> with newlines
     text = re.sub(r'<br\s*/?>', '\n', text)
-    # Remove all other HTML tags
     text = re.sub(r'<[^>]+>', '', text)
-    # Decode common HTML entities
     text = text.replace('&amp;', '&')
     text = text.replace('&quot;', '"')
     text = text.replace('&#x27;', "'")
@@ -105,104 +102,94 @@ def _clean_html(text: str) -> str:
     text = text.replace('&nbsp;', ' ')
     text = text.replace('&lt;', '<')
     text = text.replace('&gt;', '>')
-    # Clean up whitespace
     text = re.sub(r'\n{3,}', '\n\n', text)
     text = re.sub(r'[ \t]+', ' ', text)
     return text.strip()
 
 
-async def _fetch_genius_lyrics(artist: str, title: str, session: aiohttp.ClientSession) -> Optional[str]:
-    """Fetch lyrics from Genius"""
+async def _google_search_lyrics(artist: str, title: str, session: aiohttp.ClientSession) -> Optional[str]:
+    """Search Google for lyrics and extract from results"""
     import urllib.parse
 
     try:
-        search_term = f"{artist} {title}".replace(' ', '%20')
-        search_url = f"https://genius.com/api/search?q={search_term}"
+        # Search query optimized for lyrics
+        query = urllib.parse.quote(f"{artist} {title} lyrics")
+
+        # Use Google search
+        search_url = f"https://www.google.com/search?q={query}"
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
         }
 
-        async with session.get(search_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+        async with session.get(search_url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as response:
             if response.status != 200:
-                logger.debug(f"Genius search returned {response.status}")
+                logger.debug(f"Google search returned {response.status}")
                 return None
 
-            data = await response.json()
-            hits = data.get('response', {}).get('hits', [])
+            html = await response.text()
 
-            if not hits:
-                logger.debug("No hits from Genius search")
-                return None
+            # Google often shows lyrics directly in search results
+            # Look for the lyrics card/snippet
 
-            # Get the first song result
-            song_url = hits[0].get('result', {}).get('url')
-            if not song_url:
-                return None
+            # Pattern 1: Lyrics in data-lyricid spans
+            lyrics_matches = re.findall(
+                r'<span[^>]*data-lyricid[^>]*>(.*?)</span>',
+                html,
+                re.DOTALL
+            )
 
-            logger.debug(f"Found Genius URL: {song_url}")
-
-            # Fetch the lyrics page
-            async with session.get(song_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as page_response:
-                if page_response.status != 200:
-                    return None
-
-                html = await page_response.text()
-
-                # Try multiple patterns to extract lyrics
-                lyrics_parts = []
-
-                # Pattern 1: data-lyrics-container divs (current Genius format)
-                containers = re.findall(
-                    r'<div[^>]*data-lyrics-container="true"[^>]*>(.*?)</div>',
+            # Pattern 2: Lyrics in specific divs
+            if not lyrics_matches:
+                lyrics_matches = re.findall(
+                    r'<div[^>]*class="[^"]*ujudUb[^"]*"[^>]*>(.*?)</div>',
                     html,
-                    re.DOTALL | re.IGNORECASE
+                    re.DOTALL
                 )
-                if containers:
-                    lyrics_parts.extend(containers)
 
-                # Pattern 2: Lyrics__Container class
-                if not lyrics_parts:
-                    containers = re.findall(
-                        r'<div[^>]*class="[^"]*Lyrics__Container[^"]*"[^>]*>(.*?)</div>',
-                        html,
-                        re.DOTALL | re.IGNORECASE
-                    )
-                    if containers:
-                        lyrics_parts.extend(containers)
+            # Pattern 3: Look for lyrics sections
+            if not lyrics_matches:
+                lyrics_matches = re.findall(
+                    r'<div[^>]*jsname="[^"]*"[^>]*data-lyricid[^>]*>(.*?)</div>',
+                    html,
+                    re.DOTALL
+                )
 
-                # Pattern 3: Look for lyrics in JSON data embedded in page
-                if not lyrics_parts:
-                    json_match = re.search(r'"lyrics":\s*\{"body":\s*\{"html":\s*"([^"]+)"', html)
-                    if json_match:
-                        lyrics_html = json_match.group(1)
-                        lyrics_html = lyrics_html.encode().decode('unicode_escape')
-                        lyrics_parts.append(lyrics_html)
+            if lyrics_matches:
+                lyrics = '\n'.join(lyrics_matches)
+                lyrics = _clean_html(lyrics)
+                if len(lyrics) > 100:
+                    logger.debug("Found lyrics in Google search results")
+                    return lyrics
 
-                if lyrics_parts:
-                    lyrics = '\n'.join(lyrics_parts)
-                    lyrics = _clean_html(lyrics)
+            # Extract Genius/AZLyrics URLs from search results and try to fetch
+            genius_match = re.search(r'href="(https://genius\.com/[^"]+)"', html)
+            if genius_match:
+                genius_url = genius_match.group(1)
+                logger.debug(f"Found Genius URL in search: {genius_url}")
+                lyrics = await _fetch_url_lyrics(genius_url, session)
+                if lyrics:
+                    return lyrics
 
-                    if len(lyrics) > 50:
-                        logger.debug("Found lyrics on Genius")
-                        return lyrics
+            azlyrics_match = re.search(r'href="(https://www\.azlyrics\.com/lyrics/[^"]+)"', html)
+            if azlyrics_match:
+                az_url = azlyrics_match.group(1)
+                logger.debug(f"Found AZLyrics URL in search: {az_url}")
+                lyrics = await _fetch_url_lyrics(az_url, session)
+                if lyrics:
+                    return lyrics
 
     except Exception as e:
-        logger.debug(f"Genius failed: {e}")
+        logger.debug(f"Google search failed: {e}")
 
     return None
 
 
-async def _fetch_azlyrics(artist: str, title: str, session: aiohttp.ClientSession) -> Optional[str]:
-    """Fetch lyrics from AZLyrics"""
+async def _fetch_url_lyrics(url: str, session: aiohttp.ClientSession) -> Optional[str]:
+    """Fetch lyrics from a specific URL (Genius, AZLyrics, etc.)"""
     try:
-        # AZLyrics URL format: azlyrics.com/lyrics/artistname/songname.html
-        clean_artist = re.sub(r'[^a-z0-9]', '', artist.lower())
-        clean_title = re.sub(r'[^a-z0-9]', '', title.lower())
-
-        url = f"https://www.azlyrics.com/lyrics/{clean_artist}/{clean_title}.html"
-
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
@@ -213,80 +200,159 @@ async def _fetch_azlyrics(artist: str, title: str, session: aiohttp.ClientSessio
 
             html = await response.text()
 
-            # AZLyrics has lyrics in a div after the comment "Usage of azlyrics.com content"
-            match = re.search(
-                r'<!-- Usage of azlyrics\.com content.*?-->\s*</div>\s*<div>(.*?)</div>',
-                html,
-                re.DOTALL | re.IGNORECASE
-            )
+            # Genius patterns
+            if 'genius.com' in url:
+                lyrics_parts = []
 
-            if match:
-                lyrics = _clean_html(match.group(1))
-                if len(lyrics) > 50:
-                    logger.debug("Found lyrics on AZLyrics")
-                    return lyrics
+                # Current Genius format
+                containers = re.findall(
+                    r'<div[^>]*data-lyrics-container="true"[^>]*>(.*?)</div>',
+                    html,
+                    re.DOTALL
+                )
+                if containers:
+                    lyrics_parts.extend(containers)
+
+                # Alternative Genius format
+                if not lyrics_parts:
+                    containers = re.findall(
+                        r'Lyrics__Container[^>]*>(.*?)</div>',
+                        html,
+                        re.DOTALL
+                    )
+                    lyrics_parts.extend(containers)
+
+                if lyrics_parts:
+                    lyrics = '\n'.join(lyrics_parts)
+                    lyrics = _clean_html(lyrics)
+                    if len(lyrics) > 50:
+                        logger.debug("Found lyrics on Genius")
+                        return lyrics
+
+            # AZLyrics pattern
+            elif 'azlyrics.com' in url:
+                match = re.search(
+                    r'<!-- Usage of azlyrics\.com content.*?-->\s*</div>\s*<div>(.*?)</div>',
+                    html,
+                    re.DOTALL
+                )
+                if match:
+                    lyrics = _clean_html(match.group(1))
+                    if len(lyrics) > 50:
+                        logger.debug("Found lyrics on AZLyrics")
+                        return lyrics
+
+            # Generic lyrics extraction
+            else:
+                # Look for common lyrics container patterns
+                patterns = [
+                    r'<div[^>]*class="[^"]*lyrics[^"]*"[^>]*>(.*?)</div>',
+                    r'<div[^>]*id="[^"]*lyrics[^"]*"[^>]*>(.*?)</div>',
+                    r'<pre[^>]*>(.*?)</pre>',
+                ]
+                for pattern in patterns:
+                    match = re.search(pattern, html, re.DOTALL | re.IGNORECASE)
+                    if match:
+                        lyrics = _clean_html(match.group(1))
+                        if len(lyrics) > 100:
+                            return lyrics
 
     except Exception as e:
-        logger.debug(f"AZLyrics failed: {e}")
+        logger.debug(f"Failed to fetch lyrics from URL: {e}")
 
     return None
 
 
-async def _fetch_lyrics_ovh(artist: str, title: str, session: aiohttp.ClientSession) -> Optional[str]:
-    """Fetch lyrics from lyrics.ovh API"""
-    import urllib.parse
+async def _fetch_with_ai(artist: str, title: str) -> Optional[str]:
+    """Use OpenRouter AI to help find lyrics"""
+    import os
+
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    if not api_key:
+        logger.debug("No OpenRouter API key for AI lyrics search")
+        return None
 
     try:
-        encoded_artist = urllib.parse.quote(artist)
-        encoded_title = urllib.parse.quote(title)
-        url = f"https://api.lyrics.ovh/v1/{encoded_artist}/{encoded_title}"
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://github.com/gojo-bot',
+            }
 
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as response:
-            if response.status == 200:
-                data = await response.json()
-                lyrics = data.get('lyrics')
-                if lyrics and len(lyrics) > 50:
-                    logger.debug("Found lyrics on lyrics.ovh")
-                    return lyrics
+            # Ask AI to provide lyrics
+            prompt = f"""Please provide the complete lyrics for the song "{title}" by {artist}.
+
+Only respond with the lyrics themselves, no introduction or explanation. If you don't know the exact lyrics, say "LYRICS_NOT_FOUND"."""
+
+            payload = {
+                'model': 'google/gemini-2.0-flash-001',
+                'messages': [
+                    {'role': 'user', 'content': prompt}
+                ],
+                'max_tokens': 2000,
+                'temperature': 0.1,
+            }
+
+            async with session.post(
+                'https://openrouter.ai/api/v1/chat/completions',
+                headers=headers,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+                    if content and 'LYRICS_NOT_FOUND' not in content and len(content) > 100:
+                        logger.debug("Found lyrics via AI")
+                        return content.strip()
 
     except Exception as e:
-        logger.debug(f"lyrics.ovh failed: {e}")
+        logger.debug(f"AI lyrics search failed: {e}")
 
     return None
 
 
-async def _fetch_lrclib(artist: str, title: str, session: aiohttp.ClientSession) -> Optional[str]:
-    """Fetch lyrics from lrclib.net"""
+async def _fetch_duckduckgo_lyrics(artist: str, title: str, session: aiohttp.ClientSession) -> Optional[str]:
+    """Search DuckDuckGo for lyrics"""
     import urllib.parse
 
     try:
-        encoded_query = urllib.parse.quote(f"{artist} {title}")
-        url = f"https://lrclib.net/api/search?q={encoded_query}"
+        query = urllib.parse.quote(f"{artist} {title} lyrics site:genius.com OR site:azlyrics.com")
+        search_url = f"https://html.duckduckgo.com/html/?q={query}"
 
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as response:
-            if response.status == 200:
-                data = await response.json()
-                if data and len(data) > 0:
-                    for result in data:
-                        plain_lyrics = result.get('plainLyrics')
-                        if plain_lyrics and len(plain_lyrics) > 50:
-                            logger.debug("Found lyrics on lrclib.net")
-                            return plain_lyrics
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
+
+        async with session.get(search_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            if response.status != 200:
+                return None
+
+            html = await response.text()
+
+            # Find lyrics URLs in results
+            urls = re.findall(r'href="(https?://(?:www\.)?(?:genius\.com|azlyrics\.com)/[^"]+)"', html)
+
+            for url in urls[:3]:  # Try first 3 results
+                lyrics = await _fetch_url_lyrics(url, session)
+                if lyrics:
+                    return lyrics
 
     except Exception as e:
-        logger.debug(f"lrclib.net failed: {e}")
+        logger.debug(f"DuckDuckGo search failed: {e}")
 
     return None
 
 
 async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
-    """Fetch lyrics from multiple sources"""
+    """Fetch lyrics using Google search, web scraping, and AI"""
     try:
-        # Clean up artist and title for search
+        # Clean up artist and title
         clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip()
         clean_title = re.sub(r'(feat\.?|ft\.?|featuring).*', '', clean_title, flags=re.IGNORECASE).strip()
         clean_title = re.sub(r'\s*-\s*$', '', clean_title).strip()
-        # Remove numbers at the end (like "Song (7)")
         clean_title = re.sub(r'\s*\(\d+\)\s*$', '', clean_title).strip()
 
         clean_artist = re.sub(r'\(.*?\)|\[.*?\]', '', artist).strip()
@@ -294,40 +360,41 @@ async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
 
         logger.debug(f"Searching lyrics for: '{clean_artist}' - '{clean_title}'")
 
-        # Use a single session for all requests
         async with aiohttp.ClientSession() as session:
-            # Try sources in order of reliability
-            # 1. Genius (best database)
-            lyrics = await _fetch_genius_lyrics(clean_artist, clean_title, session)
+            # 1. Try Google search first (often has lyrics directly)
+            lyrics = await _google_search_lyrics(clean_artist, clean_title, session)
             if lyrics:
                 return lyrics
 
-            # 2. AZLyrics (good coverage)
-            lyrics = await _fetch_azlyrics(clean_artist, clean_title, session)
+            # 2. Try DuckDuckGo to find lyrics pages
+            lyrics = await _duckduckgo_search_lyrics(clean_artist, clean_title, session)
             if lyrics:
                 return lyrics
 
-            # 3. lrclib.net (good for synced lyrics)
-            lyrics = await _fetch_lrclib(clean_artist, clean_title, session)
+            # 3. Try direct Genius URL construction
+            genius_slug = f"{clean_artist} {clean_title}".lower()
+            genius_slug = re.sub(r'[^a-z0-9\s]', '', genius_slug)
+            genius_slug = re.sub(r'\s+', '-', genius_slug)
+            genius_url = f"https://genius.com/{genius_slug}-lyrics"
+            lyrics = await _fetch_url_lyrics(genius_url, session)
             if lyrics:
                 return lyrics
 
-            # 4. lyrics.ovh (API fallback)
-            lyrics = await _fetch_lyrics_ovh(clean_artist, clean_title, session)
-            if lyrics:
-                return lyrics
-
-            # Try with just title (artist might be wrong)
-            logger.debug(f"Trying title-only search: '{clean_title}'")
-            lyrics = await _fetch_genius_lyrics("", clean_title, session)
-            if lyrics:
-                return lyrics
+        # 4. Use AI as final fallback
+        lyrics = await _fetch_with_ai(clean_artist, clean_title)
+        if lyrics:
+            return lyrics
 
     except Exception as e:
         logger.debug(f"Failed to fetch lyrics: {e}")
 
     logger.debug(f"No lyrics found for: '{artist}' - '{title}'")
     return None
+
+
+async def _duckduckgo_search_lyrics(artist: str, title: str, session: aiohttp.ClientSession) -> Optional[str]:
+    """Search DuckDuckGo for lyrics pages"""
+    return await _fetch_duckduckgo_lyrics(artist, title, session)
 
 
 # =============================================================================
