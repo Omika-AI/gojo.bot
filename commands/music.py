@@ -22,6 +22,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Button
 import asyncio
+import aiohttp
 import re
 from typing import Optional, Dict, List
 from datetime import timedelta
@@ -85,18 +86,78 @@ SOUNDCLOUD_ALBUM_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/[^/]+/a
 
 
 # =============================================================================
+# LYRICS FETCHER
+# =============================================================================
+
+async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
+    """Fetch lyrics from lrclib.net API"""
+    try:
+        # Clean up artist and title for search
+        clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip()
+        clean_artist = re.sub(r'\(.*?\)|\[.*?\]', '', artist).strip()
+
+        # Try lrclib.net API (free, no auth required)
+        url = f"https://lrclib.net/api/search?q={clean_artist} {clean_title}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data and len(data) > 0:
+                        # Get the first result with plain lyrics
+                        for result in data:
+                            plain_lyrics = result.get('plainLyrics')
+                            if plain_lyrics:
+                                return plain_lyrics
+
+        # Fallback: try lyrics.ovh API
+        fallback_url = f"https://api.lyrics.ovh/v1/{clean_artist}/{clean_title}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(fallback_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    lyrics = data.get('lyrics')
+                    if lyrics:
+                        return lyrics
+
+    except Exception as e:
+        logger.debug(f"Failed to fetch lyrics: {e}")
+
+    return None
+
+
+# =============================================================================
 # SONG CLASS
 # =============================================================================
 
 class Song:
-    """Represents a song in the queue"""
+    """Represents a song in the queue with full metadata"""
 
-    def __init__(self, title: str, url: str, duration: int, thumbnail: str, requester: discord.Member):
+    def __init__(
+        self,
+        title: str,
+        url: str,
+        duration: int,
+        thumbnail: str,
+        requester: discord.Member,
+        artist: str = "Unknown Artist",
+        album: str = None,
+        uploader: str = None,
+        webpage_url: str = None,
+        description: str = None
+    ):
         self.title = title
         self.url = url
         self.duration = duration  # in seconds
         self.thumbnail = thumbnail
         self.requester = requester
+        self.artist = artist
+        self.album = album
+        self.uploader = uploader or artist
+        self.webpage_url = webpage_url
+        self.description = description
+        self.lyrics: Optional[str] = None
+        self.lyrics_fetched = False  # Track if we've tried to fetch lyrics
 
     @property
     def duration_str(self) -> str:
@@ -108,6 +169,102 @@ class Song:
             minutes = (self.duration % 3600) // 60
             seconds = self.duration % 60
             return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+    def get_collaborators(self) -> List[str]:
+        """Extract collaborating artists from title (feat., ft., with, &, x)"""
+        collaborators = []
+        patterns = [
+            r'(?:feat\.?|ft\.?|featuring)\s+([^(\[\]]+?)(?:\s*[\(\[\]]|$)',
+            r'(?:with|w/)\s+([^(\[\]]+?)(?:\s*[\(\[\]]|$)',
+            r'\s+[x&]\s+([^(\[\]]+?)(?:\s*[\(\[\]]|$)',
+        ]
+
+        text = self.title.lower()
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                # Clean up and split multiple artists
+                artists = re.split(r'[,&]', match)
+                for artist in artists:
+                    clean = artist.strip().title()
+                    if clean and clean not in collaborators:
+                        collaborators.append(clean)
+
+        return collaborators
+
+    async def fetch_lyrics_async(self):
+        """Fetch lyrics for this song"""
+        if self.lyrics_fetched:
+            return
+
+        self.lyrics_fetched = True
+        self.lyrics = await fetch_lyrics(self.artist, self.title)
+
+
+# =============================================================================
+# NOW PLAYING VIEW WITH LYRICS BUTTON
+# =============================================================================
+
+class NowPlayingView(View):
+    """View for now playing message with optional Lyrics button"""
+
+    def __init__(self, song: Song, has_lyrics: bool = False):
+        super().__init__(timeout=None)  # Don't timeout
+        self.song = song
+
+        # Only add Lyrics button if lyrics are available
+        if has_lyrics:
+            self.add_item(LyricsButton(song))
+
+
+class LyricsButton(Button):
+    """Button to show song lyrics"""
+
+    def __init__(self, song: Song):
+        super().__init__(
+            label="Lyrics",
+            style=discord.ButtonStyle.secondary,
+            emoji="📜"
+        )
+        self.song = song
+
+    async def callback(self, interaction: discord.Interaction):
+        """Send lyrics when button is clicked"""
+        if not self.song.lyrics:
+            await interaction.response.send_message(
+                "Lyrics not available for this song.",
+                ephemeral=True
+            )
+            return
+
+        lyrics = self.song.lyrics
+
+        # Discord has a 2000 character limit for messages
+        if len(lyrics) <= 1900:
+            embed = discord.Embed(
+                title=f"Lyrics: {self.song.title}",
+                description=lyrics,
+                color=discord.Color.orange()
+            )
+            embed.set_footer(text=f"Artist: {self.song.artist}")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            # Split into multiple embeds
+            chunks = [lyrics[i:i+1900] for i in range(0, len(lyrics), 1900)]
+
+            first_embed = discord.Embed(
+                title=f"Lyrics: {self.song.title}",
+                description=chunks[0],
+                color=discord.Color.orange()
+            )
+            await interaction.response.send_message(embed=first_embed, ephemeral=True)
+
+            for chunk in chunks[1:]:
+                embed = discord.Embed(
+                    description=chunk,
+                    color=discord.Color.orange()
+                )
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 # =============================================================================
@@ -127,6 +284,9 @@ class MusicPlayer:
         self.loop = False
         self._ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS) if YTDLP_AVAILABLE else None
         self._ytdl_playlist = yt_dlp.YoutubeDL(YTDL_PLAYLIST_OPTIONS) if YTDLP_AVAILABLE else None
+        # Track now playing message for updates
+        self.now_playing_message: Optional[discord.Message] = None
+        self.text_channel: Optional[discord.TextChannel] = None
 
     async def connect(self, channel: discord.VoiceChannel) -> bool:
         """Connect to a voice channel"""
@@ -178,12 +338,29 @@ class MusicPlayer:
             if 'entries' in data:
                 data = data['entries'][0]
 
+            # Extract artist info (SoundCloud uses 'uploader' field)
+            artist = data.get('uploader', data.get('artist', 'Unknown Artist'))
+            album = data.get('album', None)
+
+            # Try to extract album from description if not available
+            description = data.get('description', '')
+            if not album and description:
+                # Look for album mentions in description
+                album_match = re.search(r'(?:album|EP|LP)[:\s]+([^\n]+)', description, re.IGNORECASE)
+                if album_match:
+                    album = album_match.group(1).strip()[:50]  # Limit length
+
             song = Song(
                 title=data.get('title', 'Unknown'),
                 url=data.get('url') or data.get('webpage_url', ''),
                 duration=data.get('duration') or 0,
                 thumbnail=data.get('thumbnail', ''),
-                requester=requester
+                requester=requester,
+                artist=artist,
+                album=album,
+                uploader=data.get('uploader', artist),
+                webpage_url=data.get('webpage_url', ''),
+                description=description[:500] if description else None
             )
 
             self.queue.append(song)
@@ -211,6 +388,9 @@ class MusicPlayer:
             if not data:
                 return []
 
+            # Get playlist title as album name
+            playlist_title = data.get('title', None)
+
             # Get entries from playlist
             entries = data.get('entries', [])
             if not entries:
@@ -223,13 +403,20 @@ class MusicPlayer:
                 if not entry:
                     continue
 
-                # Create song from entry data
+                # Extract artist info
+                artist = entry.get('uploader', entry.get('artist', 'Unknown Artist'))
+
+                # Create song from entry data with metadata
                 song = Song(
                     title=entry.get('title', 'Unknown'),
                     url=entry.get('url') or entry.get('webpage_url', ''),
                     duration=entry.get('duration') or 0,
                     thumbnail=entry.get('thumbnail', ''),
-                    requester=requester
+                    requester=requester,
+                    artist=artist,
+                    album=playlist_title,  # Use playlist name as album
+                    uploader=entry.get('uploader', artist),
+                    webpage_url=entry.get('webpage_url', '')
                 )
 
                 self.queue.append(song)
@@ -241,11 +428,101 @@ class MusicPlayer:
             logger.error(f"Failed to add playlist: {e}")
             return []
 
+    async def _update_formerly_played(self, song: Song):
+        """Update the now playing message to show it's finished"""
+        if self.now_playing_message:
+            try:
+                # Create "formerly played" embed
+                embed = discord.Embed(
+                    title="Formerly Played",
+                    description=f"**{song.title}** by **{song.artist}**",
+                    color=discord.Color.dark_grey()
+                )
+                # Edit the message to remove buttons and update text
+                await self.now_playing_message.edit(embed=embed, view=None)
+            except discord.NotFound:
+                pass  # Message was deleted
+            except discord.HTTPException as e:
+                logger.debug(f"Could not update formerly played message: {e}")
+            finally:
+                self.now_playing_message = None
+
+    async def _send_now_playing(self, song: Song):
+        """Send the now playing message with enhanced info"""
+        if not self.text_channel:
+            return
+
+        # Fetch lyrics in background
+        await song.fetch_lyrics_async()
+
+        # Build enhanced embed
+        embed = discord.Embed(
+            title="Now Playing",
+            color=discord.Color.orange()
+        )
+
+        # Song title with link if available
+        if song.webpage_url:
+            embed.description = f"**[{song.title}]({song.webpage_url})**"
+        else:
+            embed.description = f"**{song.title}**"
+
+        # Artist field
+        embed.add_field(name="Artist", value=song.artist, inline=True)
+
+        # Album field (if available)
+        if song.album:
+            embed.add_field(name="Album", value=song.album, inline=True)
+
+        # Duration field
+        embed.add_field(name="Duration", value=song.duration_str, inline=True)
+
+        # Collaborators (if any)
+        collaborators = song.get_collaborators()
+        if collaborators:
+            embed.add_field(
+                name="Featuring",
+                value=", ".join(collaborators),
+                inline=True
+            )
+
+        # Requested by
+        embed.add_field(name="Requested by", value=song.requester.mention, inline=True)
+
+        # Queue info
+        embed.add_field(name="Queue", value=f"{len(self.queue)} songs", inline=True)
+
+        # Thumbnail
+        if song.thumbnail:
+            embed.set_thumbnail(url=song.thumbnail)
+
+        # Footer
+        embed.set_footer(text="SoundCloud")
+
+        # Create view with Lyrics button only if lyrics are available
+        has_lyrics = song.lyrics is not None and len(song.lyrics) > 0
+        view = NowPlayingView(song, has_lyrics=has_lyrics)
+
+        try:
+            self.now_playing_message = await self.text_channel.send(embed=embed, view=view if has_lyrics else None)
+        except discord.HTTPException as e:
+            logger.error(f"Failed to send now playing message: {e}")
+
     async def play_next(self):
         """Play the next song in the queue"""
+        # Store the previous song to update "formerly played"
+        previous_song = self.current
+
         if not self.queue or not self.voice_client:
             self.current = None
+            # Update the last message to "formerly played" if there was a song
+            if previous_song:
+                await self._update_formerly_played(previous_song)
             return
+
+        # Update the previous now playing message
+        if previous_song:
+            await self._update_formerly_played(previous_song)
 
         self.current = self.queue.pop(0)
 
@@ -268,9 +545,17 @@ class MusicPlayer:
                 await self.play_next()
                 return
 
+            # Update song metadata with fresh data
+            self.current.artist = data.get('uploader', self.current.artist)
+            self.current.thumbnail = data.get('thumbnail', self.current.thumbnail)
+            self.current.webpage_url = data.get('webpage_url', self.current.webpage_url)
+
             # Create audio source
             source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS)
             source = discord.PCMVolumeTransformer(source, volume=self.volume)
+
+            # Send now playing message
+            await self._send_now_playing(self.current)
 
             # Play the audio
             def after_playing(error):
@@ -361,6 +646,9 @@ class Music(commands.Cog):
 
         player = self.get_player(interaction.guild)
 
+        # Set the text channel for now playing messages
+        player.text_channel = interaction.channel
+
         # Connect to voice channel
         if not await player.connect(voice_channel):
             await interaction.followup.send("❌ Failed to connect to voice channel!")
@@ -380,32 +668,22 @@ class Music(commands.Cog):
             await interaction.followup.send("❌ Couldn't find any songs on SoundCloud!")
             return
 
-        added_songs = [song]
-
         # Start playing if not already
         if not player.voice_client.is_playing() and not player.voice_client.is_paused():
+            # play_next will send the enhanced now playing message automatically
             await player.play_next()
-
-            embed = discord.Embed(
-                title="🔊 Now Playing",
-                description=f"**{player.current.title}**",
-                color=discord.Color.orange()
-            )
-            if player.current.thumbnail:
-                embed.set_thumbnail(url=player.current.thumbnail)
-            embed.add_field(name="Duration", value=player.current.duration_str, inline=True)
-            embed.add_field(name="Requested by", value=player.current.requester.mention, inline=True)
-            embed.add_field(name="Queue", value=f"{len(player.queue)} songs", inline=True)
-            await interaction.followup.send(embed=embed)
         else:
-            song = added_songs[0]
+            # Song was added to queue - show "Added to Queue" message
             embed = discord.Embed(
-                title="➕ Added to Queue",
+                title="Added to Queue",
                 description=f"**{song.title}**",
                 color=discord.Color.orange()
             )
+            embed.add_field(name="Artist", value=song.artist, inline=True)
             embed.add_field(name="Position", value=f"#{len(player.queue)}", inline=True)
             embed.add_field(name="Duration", value=song.duration_str, inline=True)
+            if song.thumbnail:
+                embed.set_thumbnail(url=song.thumbnail)
             await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="playlist", description="Play a SoundCloud playlist or album")
@@ -440,6 +718,9 @@ class Music(commands.Cog):
 
         player = self.get_player(interaction.guild)
 
+        # Set the text channel for now playing messages
+        player.text_channel = interaction.channel
+
         # Connect to voice channel
         if not await player.connect(voice_channel):
             await interaction.followup.send("❌ Failed to connect to voice channel!")
@@ -459,7 +740,7 @@ class Music(commands.Cog):
         duration_str = str(timedelta(seconds=total_duration))
 
         embed = discord.Embed(
-            title="📂 Playlist Added",
+            title="Playlist Added",
             description=f"Added **{len(added_songs)}** songs to the queue",
             color=discord.Color.orange()
         )
@@ -475,20 +756,9 @@ class Music(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
-        # Start playing if not already
+        # Start playing if not already - play_next will send the enhanced now playing message
         if not player.voice_client.is_playing() and not player.voice_client.is_paused():
             await player.play_next()
-
-            now_playing = discord.Embed(
-                title="🔊 Now Playing",
-                description=f"**{player.current.title}**",
-                color=discord.Color.orange()
-            )
-            if player.current.thumbnail:
-                now_playing.set_thumbnail(url=player.current.thumbnail)
-            now_playing.add_field(name="Duration", value=player.current.duration_str, inline=True)
-            now_playing.add_field(name="Queue", value=f"{len(player.queue)} songs", inline=True)
-            await interaction.followup.send(embed=now_playing)
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
@@ -549,29 +819,32 @@ class Music(commands.Cog):
 
     @app_commands.command(name="queue", description="View the current song queue")
     async def queue(self, interaction: discord.Interaction):
-        """Show the queue"""
+        """Show the queue with artist info"""
         log_command(str(interaction.user), interaction.user.id, "queue", interaction.guild.name)
 
         player = self.get_player(interaction.guild)
 
         embed = discord.Embed(
-            title="🎵 Music Queue",
+            title="Music Queue",
             color=discord.Color.purple()
         )
 
-        # Current song
+        # Current song with artist
         if player.current:
+            current_text = f"**{player.current.title}**\n"
+            current_text += f"by {player.current.artist} | `{player.current.duration_str}`\n"
+            current_text += f"Requested by {player.current.requester.mention}"
             embed.add_field(
                 name="Now Playing",
-                value=f"**{player.current.title}**\n`{player.current.duration_str}` | Requested by {player.current.requester.mention}",
+                value=current_text,
                 inline=False
             )
 
-        # Queue
+        # Queue with artists
         if player.queue:
             queue_text = ""
             for i, song in enumerate(player.queue[:10], 1):
-                queue_text += f"`{i}.` **{song.title}** `{song.duration_str}`\n"
+                queue_text += f"`{i}.` **{song.title}** by {song.artist} `{song.duration_str}`\n"
 
             if len(player.queue) > 10:
                 queue_text += f"\n*...and {len(player.queue) - 10} more songs*"
@@ -592,30 +865,73 @@ class Music(commands.Cog):
 
     @app_commands.command(name="nowplaying", description="Show the currently playing song")
     async def nowplaying(self, interaction: discord.Interaction):
-        """Show current song"""
+        """Show current song with full details"""
         log_command(str(interaction.user), interaction.user.id, "nowplaying", interaction.guild.name)
 
         player = self.get_player(interaction.guild)
 
         if not player.current:
-            await interaction.response.send_message("❌ Nothing is playing!", ephemeral=True)
+            await interaction.response.send_message("Nothing is playing!", ephemeral=True)
             return
 
+        song = player.current
+
+        # Build enhanced embed
         embed = discord.Embed(
-            title="🔊 Now Playing",
-            description=f"**{player.current.title}**",
+            title="Now Playing",
             color=discord.Color.orange()
         )
 
-        if player.current.thumbnail:
-            embed.set_thumbnail(url=player.current.thumbnail)
+        # Song title with link if available
+        if song.webpage_url:
+            embed.description = f"**[{song.title}]({song.webpage_url})**"
+        else:
+            embed.description = f"**{song.title}**"
 
-        embed.add_field(name="Duration", value=player.current.duration_str, inline=True)
-        embed.add_field(name="Requested by", value=player.current.requester.mention, inline=True)
+        # Artist field
+        embed.add_field(name="Artist", value=song.artist, inline=True)
+
+        # Album field (if available)
+        if song.album:
+            embed.add_field(name="Album", value=song.album, inline=True)
+
+        # Duration field
+        embed.add_field(name="Duration", value=song.duration_str, inline=True)
+
+        # Collaborators (if any)
+        collaborators = song.get_collaborators()
+        if collaborators:
+            embed.add_field(
+                name="Featuring",
+                value=", ".join(collaborators),
+                inline=True
+            )
+
+        # Requested by
+        embed.add_field(name="Requested by", value=song.requester.mention, inline=True)
+
+        # Volume
         embed.add_field(name="Volume", value=f"{int(player.volume * 100)}%", inline=True)
+
+        # Queue info
         embed.add_field(name="Queue", value=f"{len(player.queue)} songs remaining", inline=True)
 
-        await interaction.response.send_message(embed=embed)
+        # Thumbnail
+        if song.thumbnail:
+            embed.set_thumbnail(url=song.thumbnail)
+
+        # Footer
+        embed.set_footer(text="SoundCloud")
+
+        # Fetch lyrics if not already fetched
+        if not song.lyrics_fetched:
+            await song.fetch_lyrics_async()
+
+        # Create view with Lyrics button only if lyrics are available
+        has_lyrics = song.lyrics is not None and len(song.lyrics) > 0
+        view = NowPlayingView(song, has_lyrics=has_lyrics) if has_lyrics else None
+
+        await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="volume", description="Adjust the music volume")
     @app_commands.describe(level="Volume level (0-100)")
