@@ -440,7 +440,7 @@ class InformationView(View):
         return embed
 
     def _build_features_embed(self) -> discord.Embed:
-        """Build the features overview embed (Page 2)"""
+        """Build the features overview embed (Page 2) - Shows only public features"""
         embed = discord.Embed(
             title=f"✨ {config.BOT_NAME} Features",
             description=f"**Page 2/{self.total_pages}** - Features Overview",
@@ -449,12 +449,6 @@ class InformationView(View):
 
         if self.bot.user:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-
-        # Check user permissions for conditional features display
-        perms = self.user.guild_permissions
-        is_mod = perms.manage_messages or perms.moderate_members
-        is_admin = perms.administrator
-        is_owner = self.user.id == self.user.guild.owner_id
 
         # Music Features (Everyone)
         embed.add_field(
@@ -481,46 +475,16 @@ class InformationView(View):
             inline=False
         )
 
-        # Moderation Features (Mods/Admins only)
-        if is_mod or is_admin:
-            embed.add_field(
-                name="🛡️ Moderation System",
-                value=(
-                    "• **Moderation Panel** - All-in-one panel for kick, ban, timeout, warn\n"
-                    "• **Timeout System** - Temporarily mute disruptive users\n"
-                    "• **Warning System** - Track user warnings with severity levels\n"
-                    "• **Moderation Logs** - Track all mod actions with filters\n"
-                    "• **Mod Activity** - View what actions moderators have taken\n"
-                    "• **User History** - View a user's complete moderation history\n"
-                    "• **ModTalk** - Send messages as the bot in any channel"
-                ),
-                inline=False
-            )
-
-        # Admin Features (Admins only)
-        if is_admin:
-            embed.add_field(
-                name="👑 Admin Tools",
-                value=(
-                    "• **Admin Profiles** - Detailed member stats, permissions, and warnings\n"
-                    "• **Webhook Manager** - Create and edit webhook messages with embeds\n"
-                    "• **Mod Statistics** - View top moderators and action counts"
-                ),
-                inline=False
-            )
-
-        # Owner Features (Owner only)
-        if is_owner:
-            embed.add_field(
-                name="🔐 Owner Tools",
-                value=(
-                    "• **Event Logging** - Comprehensive server event logging via webhooks\n"
-                    "• **Log Search** - Search logs by user, category, or text\n"
-                    "• **Log Statistics** - View logging stats and event counts\n"
-                    "• **Clear Logs** - Clear moderation logs when needed"
-                ),
-                inline=False
-            )
+        # General Utilities (Everyone)
+        embed.add_field(
+            name="🔧 Utilities",
+            value=(
+                "• **Help Command** - Quick list of available commands\n"
+                "• **Information** - Detailed bot info and command guide\n"
+                "• **Ping** - Check if the bot is online and responsive"
+            ),
+            inline=False
+        )
 
         # Coming Soon
         embed.add_field(
@@ -533,6 +497,15 @@ class InformationView(View):
             ),
             inline=False
         )
+
+        # Note about more features for staff
+        perms = self.user.guild_permissions
+        if perms.manage_messages or perms.moderate_members or perms.administrator:
+            embed.add_field(
+                name="🔒 Staff Features",
+                value="*You have access to additional commands. Browse the category pages to see moderation, admin, and owner tools.*",
+                inline=False
+            )
 
         embed.set_footer(text=f"Requested by {self.user} • Use buttons to navigate")
 
