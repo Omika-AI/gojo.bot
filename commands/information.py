@@ -4,7 +4,7 @@ Displays bot information, features, and available commands
 Shows only commands the user has permission to use
 
 IMPORTANT: Update this file when adding new commands!
-Last updated: 2026-01-02
+Last updated: 2026-01-08
 """
 
 import discord
@@ -222,6 +222,34 @@ COMMANDS_REGISTRY = [
         "category": "owner",
         "permission": "administrator"  # We check for owner in the command itself
     },
+    {
+        "name": "/setuplogs",
+        "description": "Set up event logging channel (Server Owner only)",
+        "usage": "/setuplogs #log-channel",
+        "category": "owner",
+        "permission": "administrator"
+    },
+    {
+        "name": "/editlogs",
+        "description": "Change the event logging channel (Server Owner only)",
+        "usage": "/editlogs #new-log-channel",
+        "category": "owner",
+        "permission": "administrator"
+    },
+    {
+        "name": "/searchlogs",
+        "description": "Search event logs with filters (Server Owner only)",
+        "usage": "/searchlogs OR /searchlogs @user OR /searchlogs category:messages",
+        "category": "owner",
+        "permission": "administrator"
+    },
+    {
+        "name": "/logstats",
+        "description": "View event logging statistics (Server Owner only)",
+        "usage": "/logstats",
+        "category": "owner",
+        "permission": "administrator"
+    },
 ]
 
 # Category display info
@@ -413,6 +441,19 @@ class InformationView(View):
                 "• **Mod Activity** - View what actions moderators have taken\n"
                 "• **ModTalk** - Send messages as the bot\n"
                 "• **Admin Profiles** - Detailed member stats and permissions"
+            ),
+            inline=False
+        )
+
+        # Event Logging Features
+        embed.add_field(
+            name="📋 Event Logging System",
+            value=(
+                "• **Comprehensive Logs** - Track message edits/deletes, member activity, voice events\n"
+                "• **Webhook Delivery** - Logs sent via webhook to a dedicated channel\n"
+                "• **Before/After** - See what changed in edits\n"
+                "• **Searchable** - Search logs by user, category, or text\n"
+                "• **30-Day Retention** - Automatic cleanup of old logs"
             ),
             inline=False
         )
