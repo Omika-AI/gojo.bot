@@ -268,6 +268,284 @@ class LyricsButton(Button):
 
 
 # =============================================================================
+# SONG CONFIRMATION VIEW
+# =============================================================================
+
+class SongConfirmView(View):
+    """View for confirming a song before adding to queue"""
+
+    def __init__(self, song_data: dict, requester: discord.Member, player, timeout: float = 60):
+        super().__init__(timeout=timeout)
+        self.song_data = song_data
+        self.requester = requester
+        self.player = player
+        self.confirmed = None  # None = pending, True = confirmed, False = cancelled
+        self.message = None
+
+    def _create_song_from_data(self) -> Song:
+        """Create a Song object from the stored data"""
+        data = self.song_data
+
+        # Extract artist info
+        artist = data.get('uploader', data.get('artist', 'Unknown Artist'))
+        album = data.get('album', None)
+
+        # Try to extract album from description
+        description = data.get('description', '')
+        if not album and description:
+            album_match = re.search(r'(?:album|EP|LP)[:\s]+([^\n]+)', description, re.IGNORECASE)
+            if album_match:
+                album = album_match.group(1).strip()[:50]
+
+        return Song(
+            title=data.get('title', 'Unknown'),
+            url=data.get('url') or data.get('webpage_url', ''),
+            duration=data.get('duration') or 0,
+            thumbnail=data.get('thumbnail', ''),
+            requester=self.requester,
+            artist=artist,
+            album=album,
+            uploader=data.get('uploader', artist),
+            webpage_url=data.get('webpage_url', ''),
+            description=description[:500] if description else None
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only the requester can confirm/cancel"""
+        if interaction.user.id != self.requester.id:
+            await interaction.response.send_message(
+                "Only the person who searched can confirm this!",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success, emoji="✅")
+    async def confirm_button(self, interaction: discord.Interaction, button: Button):
+        """Confirm and add the song"""
+        self.confirmed = True
+
+        # Create song and add to queue
+        song = self._create_song_from_data()
+        self.player.queue.append(song)
+
+        # Update the message
+        embed = discord.Embed(
+            title="Song Added",
+            description=f"**{song.title}**",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Artist", value=song.artist, inline=True)
+        embed.add_field(name="Duration", value=song.duration_str, inline=True)
+
+        # Check if we need to start playing
+        should_play = not self.player.voice_client.is_playing() and not self.player.voice_client.is_paused()
+
+        if should_play:
+            embed.add_field(name="Status", value="Starting playback...", inline=False)
+        else:
+            embed.add_field(name="Position", value=f"#{len(self.player.queue)}", inline=True)
+
+        await interaction.response.edit_message(embed=embed, view=None)
+
+        # Start playing if needed
+        if should_play:
+            await self.player.play_next()
+
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger, emoji="❌")
+    async def cancel_button(self, interaction: discord.Interaction, button: Button):
+        """Cancel and don't add the song"""
+        self.confirmed = False
+
+        embed = discord.Embed(
+            title="Search Cancelled",
+            description="Song was not added to the queue.\nUse `/play` to search again.",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        self.stop()
+
+    async def on_timeout(self):
+        """Handle timeout - cancel the addition"""
+        if self.confirmed is None and self.message:
+            embed = discord.Embed(
+                title="Search Timed Out",
+                description="Song was not added to the queue.\nUse `/play` to search again.",
+                color=discord.Color.grey()
+            )
+            try:
+                await self.message.edit(embed=embed, view=None)
+            except discord.NotFound:
+                pass
+
+
+# =============================================================================
+# QUEUE VIEW WITH REMOVE BUTTONS
+# =============================================================================
+
+class QueueView(View):
+    """View for queue with remove buttons"""
+
+    def __init__(self, player, user_id: int, page: int = 0):
+        super().__init__(timeout=120)
+        self.player = player
+        self.user_id = user_id
+        self.page = page
+        self.songs_per_page = 5
+        self.message = None
+
+        self._update_buttons()
+
+    def _update_buttons(self):
+        """Update button states based on queue"""
+        # Clear existing items
+        self.clear_items()
+
+        # Calculate page info
+        total_songs = len(self.player.queue)
+        total_pages = max(1, (total_songs + self.songs_per_page - 1) // self.songs_per_page)
+        start_idx = self.page * self.songs_per_page
+        end_idx = min(start_idx + self.songs_per_page, total_songs)
+
+        # Add remove buttons for songs on this page (row 0)
+        for i in range(start_idx, end_idx):
+            queue_position = i + 1  # 1-indexed for display
+            btn = RemoveSongButton(queue_position, self.player, self)
+            self.add_item(btn)
+
+        # Add navigation buttons (row 1)
+        prev_btn = Button(label="◀ Prev", style=discord.ButtonStyle.secondary, disabled=(self.page <= 0), row=1)
+        prev_btn.callback = self._prev_page
+        self.add_item(prev_btn)
+
+        page_btn = Button(label=f"Page {self.page + 1}/{total_pages}", style=discord.ButtonStyle.secondary, disabled=True, row=1)
+        self.add_item(page_btn)
+
+        next_btn = Button(label="Next ▶", style=discord.ButtonStyle.secondary, disabled=(self.page >= total_pages - 1), row=1)
+        next_btn.callback = self._next_page
+        self.add_item(next_btn)
+
+        # Add close button (row 1)
+        close_btn = Button(label="Close", style=discord.ButtonStyle.danger, row=1)
+        close_btn.callback = self._close
+        self.add_item(close_btn)
+
+    async def _prev_page(self, interaction: discord.Interaction):
+        """Go to previous page"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This isn't your queue view!", ephemeral=True)
+            return
+        self.page = max(0, self.page - 1)
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self._build_embed(), view=self)
+
+    async def _next_page(self, interaction: discord.Interaction):
+        """Go to next page"""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This isn't your queue view!", ephemeral=True)
+            return
+        total_pages = max(1, (len(self.player.queue) + self.songs_per_page - 1) // self.songs_per_page)
+        self.page = min(total_pages - 1, self.page + 1)
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self._build_embed(), view=self)
+
+    async def _close(self, interaction: discord.Interaction):
+        """Close the queue view"""
+        await interaction.response.edit_message(content="Queue closed.", embed=None, view=None)
+        self.stop()
+
+    def _build_embed(self) -> discord.Embed:
+        """Build the queue embed"""
+        embed = discord.Embed(
+            title="Music Queue",
+            color=discord.Color.purple()
+        )
+
+        # Current song
+        if self.player.current:
+            current_text = f"**{self.player.current.title}**\n"
+            current_text += f"by {self.player.current.artist} | `{self.player.current.duration_str}`"
+            embed.add_field(name="Now Playing", value=current_text, inline=False)
+
+        # Queue
+        if self.player.queue:
+            start_idx = self.page * self.songs_per_page
+            end_idx = min(start_idx + self.songs_per_page, len(self.player.queue))
+
+            queue_text = ""
+            for i in range(start_idx, end_idx):
+                song = self.player.queue[i]
+                queue_text += f"`{i+1}.` **{song.title}** by {song.artist} `{song.duration_str}`\n"
+
+            embed.add_field(name="Up Next (click number to remove)", value=queue_text, inline=False)
+
+            # Total duration
+            total_seconds = sum(song.duration for song in self.player.queue)
+            if self.player.current:
+                total_seconds += self.player.current.duration
+            total_duration = str(timedelta(seconds=total_seconds))
+            embed.set_footer(text=f"Total: {len(self.player.queue)} songs | {total_duration}")
+        else:
+            if not self.player.current:
+                embed.description = "The queue is empty! Use `/play` to add songs."
+            else:
+                embed.add_field(name="Up Next", value="No songs in queue", inline=False)
+
+        return embed
+
+    async def refresh(self, interaction: discord.Interaction):
+        """Refresh the queue view after a removal"""
+        # Adjust page if needed
+        total_pages = max(1, (len(self.player.queue) + self.songs_per_page - 1) // self.songs_per_page)
+        if self.page >= total_pages:
+            self.page = max(0, total_pages - 1)
+
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self._build_embed(), view=self)
+
+
+class RemoveSongButton(Button):
+    """Button to remove a song from queue by position"""
+
+    def __init__(self, position: int, player, queue_view: QueueView):
+        super().__init__(
+            label=str(position),
+            style=discord.ButtonStyle.secondary,
+            row=0
+        )
+        self.position = position  # 1-indexed
+        self.player = player
+        self.queue_view = queue_view
+
+    async def callback(self, interaction: discord.Interaction):
+        """Remove the song at this position"""
+        if interaction.user.id != self.queue_view.user_id:
+            await interaction.response.send_message("This isn't your queue view!", ephemeral=True)
+            return
+
+        # Convert to 0-indexed
+        idx = self.position - 1
+
+        if idx < 0 or idx >= len(self.player.queue):
+            await interaction.response.send_message("That song is no longer in the queue!", ephemeral=True)
+            return
+
+        # Remove the song
+        removed_song = self.player.queue.pop(idx)
+
+        # Refresh the queue view first (this is the response)
+        await self.queue_view.refresh(interaction)
+
+        # Send confirmation as followup
+        await interaction.followup.send(
+            f"Removed **{removed_song.title}** by {removed_song.artist} from the queue.",
+            ephemeral=True
+        )
+
+
+# =============================================================================
 # MUSIC PLAYER CLASS (Per Guild)
 # =============================================================================
 
@@ -307,6 +585,40 @@ class MusicPlayer:
             self.voice_client = None
         self.queue.clear()
         self.current = None
+
+    async def search_song(self, query: str) -> Optional[dict]:
+        """Search for a song and return raw data (without adding to queue)"""
+        if not self._ytdl:
+            return None
+
+        try:
+            # Check if it's a direct SoundCloud URL
+            is_url = query.startswith('http://') or query.startswith('https://')
+
+            if is_url:
+                search_query = query
+            else:
+                search_query = f"scsearch:{query}"
+
+            # Run yt-dlp in executor to not block
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(
+                None,
+                lambda: self._ytdl.extract_info(search_query, download=False)
+            )
+
+            if not data:
+                return None
+
+            # Handle search results
+            if 'entries' in data:
+                data = data['entries'][0]
+
+            return data
+
+        except Exception as e:
+            logger.error(f"Failed to search song: {e}")
+            return None
 
     async def add_song(self, query: str, requester: discord.Member) -> Optional[Song]:
         """Add a song to the queue from a search query or SoundCloud URL"""
@@ -632,7 +944,7 @@ class Music(commands.Cog):
         # Check dependencies
         if not YTDLP_AVAILABLE:
             await interaction.response.send_message(
-                "❌ Music features are not available. yt-dlp is not installed.",
+                "Music features are not available. yt-dlp is not installed.",
                 ephemeral=True
             )
             return
@@ -651,40 +963,79 @@ class Music(commands.Cog):
 
         # Connect to voice channel
         if not await player.connect(voice_channel):
-            await interaction.followup.send("❌ Failed to connect to voice channel!")
+            await interaction.followup.send("Failed to connect to voice channel!")
             return
 
-        # Check for SoundCloud URLs (direct play)
-        if SOUNDCLOUD_PATTERN.match(query) or SOUNDCLOUD_MOBILE_PATTERN.match(query):
-            await interaction.followup.send("🔊 Found SoundCloud link...")
+        # Check if it's a direct URL or a search query
+        is_url = SOUNDCLOUD_PATTERN.match(query) or SOUNDCLOUD_MOBILE_PATTERN.match(query)
+
+        if is_url:
+            # Direct URL - add immediately without confirmation
+            await interaction.followup.send("Found SoundCloud link, adding to queue...")
+
+            song = await player.add_song(query, interaction.user)
+
+            if not song:
+                await interaction.followup.send("Couldn't load the song from that URL!")
+                return
+
+            # Start playing if not already
+            if not player.voice_client.is_playing() and not player.voice_client.is_paused():
+                await player.play_next()
+            else:
+                embed = discord.Embed(
+                    title="Added to Queue",
+                    description=f"**{song.title}**",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(name="Artist", value=song.artist, inline=True)
+                embed.add_field(name="Position", value=f"#{len(player.queue)}", inline=True)
+                embed.add_field(name="Duration", value=song.duration_str, inline=True)
+                if song.thumbnail:
+                    embed.set_thumbnail(url=song.thumbnail)
+                await interaction.followup.send(embed=embed)
         else:
-            # Regular search query
-            await interaction.followup.send(f"🔊 Searching **SoundCloud** for: `{query}`...")
+            # Search query - show confirmation before adding
+            await interaction.followup.send(f"Searching **SoundCloud** for: `{query}`...")
 
-        # Add song to queue
-        song = await player.add_song(query, interaction.user)
+            # Search without adding to queue
+            song_data = await player.search_song(query)
 
-        if not song:
-            await interaction.followup.send("❌ Couldn't find any songs on SoundCloud!")
-            return
+            if not song_data:
+                await interaction.followup.send("Couldn't find any songs on SoundCloud!")
+                return
 
-        # Start playing if not already
-        if not player.voice_client.is_playing() and not player.voice_client.is_paused():
-            # play_next will send the enhanced now playing message automatically
-            await player.play_next()
-        else:
-            # Song was added to queue - show "Added to Queue" message
+            # Extract info for display
+            title = song_data.get('title', 'Unknown')
+            artist = song_data.get('uploader', song_data.get('artist', 'Unknown Artist'))
+            duration = song_data.get('duration') or 0
+            thumbnail = song_data.get('thumbnail', '')
+
+            # Format duration
+            if duration < 3600:
+                duration_str = f"{duration // 60}:{duration % 60:02d}"
+            else:
+                hours = duration // 3600
+                minutes = (duration % 3600) // 60
+                seconds = duration % 60
+                duration_str = f"{hours}:{minutes:02d}:{seconds:02d}"
+
+            # Create confirmation embed
             embed = discord.Embed(
-                title="Added to Queue",
-                description=f"**{song.title}**",
-                color=discord.Color.orange()
+                title="Is this the right song?",
+                description=f"**{title}**",
+                color=discord.Color.blue()
             )
-            embed.add_field(name="Artist", value=song.artist, inline=True)
-            embed.add_field(name="Position", value=f"#{len(player.queue)}", inline=True)
-            embed.add_field(name="Duration", value=song.duration_str, inline=True)
-            if song.thumbnail:
-                embed.set_thumbnail(url=song.thumbnail)
-            await interaction.followup.send(embed=embed)
+            embed.add_field(name="Artist", value=artist, inline=True)
+            embed.add_field(name="Duration", value=duration_str, inline=True)
+            if thumbnail:
+                embed.set_thumbnail(url=thumbnail)
+            embed.set_footer(text="Click Confirm to add to queue, or Cancel to search again")
+
+            # Create confirmation view
+            view = SongConfirmView(song_data, interaction.user, player)
+            msg = await interaction.followup.send(embed=embed, view=view)
+            view.message = msg
 
     @app_commands.command(name="playlist", description="Play a SoundCloud playlist or album")
     @app_commands.describe(url="SoundCloud playlist or album URL")
@@ -819,49 +1170,26 @@ class Music(commands.Cog):
 
     @app_commands.command(name="queue", description="View the current song queue")
     async def queue(self, interaction: discord.Interaction):
-        """Show the queue with artist info"""
+        """Show the queue with remove buttons"""
         log_command(str(interaction.user), interaction.user.id, "queue", interaction.guild.name)
 
         player = self.get_player(interaction.guild)
 
-        embed = discord.Embed(
-            title="Music Queue",
-            color=discord.Color.purple()
-        )
-
-        # Current song with artist
-        if player.current:
-            current_text = f"**{player.current.title}**\n"
-            current_text += f"by {player.current.artist} | `{player.current.duration_str}`\n"
-            current_text += f"Requested by {player.current.requester.mention}"
-            embed.add_field(
-                name="Now Playing",
-                value=current_text,
-                inline=False
+        # If queue is empty and nothing playing, show simple message
+        if not player.queue and not player.current:
+            embed = discord.Embed(
+                title="Music Queue",
+                description="The queue is empty! Use `/play` to add songs.",
+                color=discord.Color.purple()
             )
+            await interaction.response.send_message(embed=embed)
+            return
 
-        # Queue with artists
-        if player.queue:
-            queue_text = ""
-            for i, song in enumerate(player.queue[:10], 1):
-                queue_text += f"`{i}.` **{song.title}** by {song.artist} `{song.duration_str}`\n"
+        # Create queue view with remove buttons
+        view = QueueView(player, interaction.user.id)
+        embed = view._build_embed()
 
-            if len(player.queue) > 10:
-                queue_text += f"\n*...and {len(player.queue) - 10} more songs*"
-
-            embed.add_field(name="Up Next", value=queue_text, inline=False)
-
-            # Total duration
-            total_seconds = sum(song.duration for song in player.queue)
-            if player.current:
-                total_seconds += player.current.duration
-            total_duration = str(timedelta(seconds=total_seconds))
-            embed.set_footer(text=f"Total: {len(player.queue) + (1 if player.current else 0)} songs | {total_duration}")
-        else:
-            if not player.current:
-                embed.description = "The queue is empty! Use `/play` to add songs."
-
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="nowplaying", description="Show the currently playing song")
     async def nowplaying(self, interaction: discord.Interaction):
