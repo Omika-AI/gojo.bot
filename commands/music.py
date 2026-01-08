@@ -67,7 +67,7 @@ YTDL_PLAYLIST_OPTIONS = {
     'quiet': True,
     'no_warnings': True,
     'source_address': '0.0.0.0',
-    'extract_flat': 'in_playlist',  # Get playlist entries without full extraction
+    'extract_flat': False,  # Fully extract each track for proper metadata
 }
 
 # FFmpeg options for audio playback
@@ -90,39 +90,78 @@ SOUNDCLOUD_ALBUM_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/[^/]+/a
 # =============================================================================
 
 async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
-    """Fetch lyrics from lrclib.net API"""
+    """Fetch lyrics from multiple APIs"""
     try:
-        # Clean up artist and title for search
+        # Clean up artist and title for search - remove common extras
         clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip()
+        clean_title = re.sub(r'(feat\.?|ft\.?|featuring).*', '', clean_title, flags=re.IGNORECASE).strip()
+        clean_title = re.sub(r'\s*-\s*$', '', clean_title).strip()  # Remove trailing dash
+
         clean_artist = re.sub(r'\(.*?\)|\[.*?\]', '', artist).strip()
+        # Remove "Official" and similar suffixes from artist name
+        clean_artist = re.sub(r'\s*(official|music|vevo|records).*', '', clean_artist, flags=re.IGNORECASE).strip()
 
-        # Try lrclib.net API (free, no auth required)
-        url = f"https://lrclib.net/api/search?q={clean_artist} {clean_title}"
+        logger.debug(f"Searching lyrics for: '{clean_artist}' - '{clean_title}'")
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data and len(data) > 0:
-                        # Get the first result with plain lyrics
-                        for result in data:
-                            plain_lyrics = result.get('plainLyrics')
-                            if plain_lyrics:
-                                return plain_lyrics
+        # Try lrclib.net API first (free, no auth required)
+        try:
+            import urllib.parse
+            encoded_query = urllib.parse.quote(f"{clean_artist} {clean_title}")
+            url = f"https://lrclib.net/api/search?q={encoded_query}"
 
-        # Fallback: try lyrics.ovh API
-        fallback_url = f"https://api.lyrics.ovh/v1/{clean_artist}/{clean_title}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(fallback_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    lyrics = data.get('lyrics')
-                    if lyrics:
-                        return lyrics
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data and len(data) > 0:
+                            for result in data:
+                                plain_lyrics = result.get('plainLyrics')
+                                if plain_lyrics and len(plain_lyrics) > 50:
+                                    logger.debug(f"Found lyrics on lrclib.net")
+                                    return plain_lyrics
+        except Exception as e:
+            logger.debug(f"lrclib.net failed: {e}")
+
+        # Try lyrics.ovh API as fallback
+        try:
+            import urllib.parse
+            encoded_artist = urllib.parse.quote(clean_artist)
+            encoded_title = urllib.parse.quote(clean_title)
+            fallback_url = f"https://api.lyrics.ovh/v1/{encoded_artist}/{encoded_title}"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(fallback_url, timeout=aiohttp.ClientTimeout(total=8)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        lyrics = data.get('lyrics')
+                        if lyrics and len(lyrics) > 50:
+                            logger.debug(f"Found lyrics on lyrics.ovh")
+                            return lyrics
+        except Exception as e:
+            logger.debug(f"lyrics.ovh failed: {e}")
+
+        # Try with just the title (sometimes artist name doesn't match)
+        try:
+            encoded_title_only = urllib.parse.quote(clean_title)
+            url = f"https://lrclib.net/api/search?q={encoded_title_only}"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data and len(data) > 0:
+                            for result in data:
+                                plain_lyrics = result.get('plainLyrics')
+                                if plain_lyrics and len(plain_lyrics) > 50:
+                                    logger.debug(f"Found lyrics on lrclib.net (title only)")
+                                    return plain_lyrics
+        except Exception as e:
+            logger.debug(f"lrclib.net (title only) failed: {e}")
 
     except Exception as e:
         logger.debug(f"Failed to fetch lyrics: {e}")
 
+    logger.debug(f"No lyrics found for: '{artist}' - '{title}'")
     return None
 
 
@@ -206,15 +245,13 @@ class Song:
 # =============================================================================
 
 class NowPlayingView(View):
-    """View for now playing message with optional Lyrics button"""
+    """View for now playing message with Lyrics button"""
 
-    def __init__(self, song: Song, has_lyrics: bool = False):
+    def __init__(self, song: Song):
         super().__init__(timeout=None)  # Don't timeout
         self.song = song
-
-        # Only add Lyrics button if lyrics are available
-        if has_lyrics:
-            self.add_item(LyricsButton(song))
+        # Always add the Lyrics button - it will handle missing lyrics gracefully
+        self.add_item(LyricsButton(song))
 
 
 class LyricsButton(Button):
@@ -230,9 +267,28 @@ class LyricsButton(Button):
 
     async def callback(self, interaction: discord.Interaction):
         """Send lyrics when button is clicked"""
-        if not self.song.lyrics:
+        # Try to fetch lyrics if not already fetched
+        if not self.song.lyrics_fetched:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            await self.song.fetch_lyrics_async()
+
+            if not self.song.lyrics:
+                await interaction.followup.send(
+                    f"Could not find lyrics for **{self.song.title}** by **{self.song.artist}**.\n"
+                    "This could be because:\n"
+                    "- The song is an instrumental\n"
+                    "- The lyrics aren't in our database\n"
+                    "- The artist/title name differs from the original",
+                    ephemeral=True
+                )
+                return
+        elif not self.song.lyrics:
             await interaction.response.send_message(
-                "Lyrics not available for this song.",
+                f"Could not find lyrics for **{self.song.title}** by **{self.song.artist}**.\n"
+                "This could be because:\n"
+                "- The song is an instrumental\n"
+                "- The lyrics aren't in our database\n"
+                "- The artist/title name differs from the original",
                 ephemeral=True
             )
             return
@@ -247,9 +303,12 @@ class LyricsButton(Button):
                 color=discord.Color.orange()
             )
             embed.set_footer(text=f"Artist: {self.song.artist}")
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            if self.song.lyrics_fetched and interaction.response.is_done():
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
-            # Split into multiple embeds
+            # Split into multiple embeds for long lyrics
             chunks = [lyrics[i:i+1900] for i in range(0, len(lyrics), 1900)]
 
             first_embed = discord.Embed(
@@ -257,7 +316,11 @@ class LyricsButton(Button):
                 description=chunks[0],
                 color=discord.Color.orange()
             )
-            await interaction.response.send_message(embed=first_embed, ephemeral=True)
+
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=first_embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(embed=first_embed, ephemeral=True)
 
             for chunk in chunks[1:]:
                 embed = discord.Embed(
@@ -688,6 +751,7 @@ class MusicPlayer:
             return []
 
         added_songs = []
+        seen_ids = set()  # Track unique song IDs to prevent duplicates
 
         try:
             # Extract playlist info
@@ -710,17 +774,30 @@ class MusicPlayer:
                 single_song = await self.add_song(url, requester)
                 return [single_song] if single_song else []
 
-            # Add each track to queue
+            # Add each unique track to queue
             for entry in entries:
                 if not entry:
                     continue
 
+                # Get unique identifier for this track
+                track_id = entry.get('id') or entry.get('webpage_url') or entry.get('title', '')
+
+                # Skip if we've already added this track
+                if track_id in seen_ids:
+                    continue
+                seen_ids.add(track_id)
+
                 # Extract artist info
                 artist = entry.get('uploader', entry.get('artist', 'Unknown Artist'))
+                title = entry.get('title', 'Unknown')
+
+                # Skip if title is empty or unknown
+                if not title or title == 'Unknown':
+                    continue
 
                 # Create song from entry data with metadata
                 song = Song(
-                    title=entry.get('title', 'Unknown'),
+                    title=title,
                     url=entry.get('url') or entry.get('webpage_url', ''),
                     duration=entry.get('duration') or 0,
                     thumbnail=entry.get('thumbnail', ''),
@@ -811,12 +888,11 @@ class MusicPlayer:
         # Footer
         embed.set_footer(text="SoundCloud")
 
-        # Create view with Lyrics button only if lyrics are available
-        has_lyrics = song.lyrics is not None and len(song.lyrics) > 0
-        view = NowPlayingView(song, has_lyrics=has_lyrics)
+        # Create view with Lyrics button (always shown - button handles missing lyrics)
+        view = NowPlayingView(song)
 
         try:
-            self.now_playing_message = await self.text_channel.send(embed=embed, view=view if has_lyrics else None)
+            self.now_playing_message = await self.text_channel.send(embed=embed, view=view)
         except discord.HTTPException as e:
             logger.error(f"Failed to send now playing message: {e}")
 
@@ -1251,13 +1327,8 @@ class Music(commands.Cog):
         # Footer
         embed.set_footer(text="SoundCloud")
 
-        # Fetch lyrics if not already fetched
-        if not song.lyrics_fetched:
-            await song.fetch_lyrics_async()
-
-        # Create view with Lyrics button only if lyrics are available
-        has_lyrics = song.lyrics is not None and len(song.lyrics) > 0
-        view = NowPlayingView(song, has_lyrics=has_lyrics) if has_lyrics else None
+        # Create view with Lyrics button (always shown - button handles missing lyrics)
+        view = NowPlayingView(song)
 
         await interaction.response.send_message(embed=embed, view=view)
 
@@ -1313,6 +1384,34 @@ class Music(commands.Cog):
 
         random.shuffle(player.queue)
         await interaction.response.send_message(f"🔀 Shuffled **{len(player.queue)}** songs!")
+
+    @app_commands.command(name="clearqueue", description="Clear the entire queue (Mods only)")
+    async def clearqueue(self, interaction: discord.Interaction):
+        """Clear the queue - requires Manage Messages or Moderate Members permission"""
+        log_command(str(interaction.user), interaction.user.id, "clearqueue", interaction.guild.name)
+
+        # Check permissions - must be owner, admin, or moderator
+        is_owner = interaction.user.id == interaction.guild.owner_id
+        is_admin = interaction.user.guild_permissions.administrator
+        is_mod = (interaction.user.guild_permissions.manage_messages or
+                  interaction.user.guild_permissions.moderate_members)
+
+        if not is_owner and not is_admin and not is_mod:
+            await interaction.response.send_message(
+                "You need **Manage Messages** or **Moderate Members** permission to clear the queue!",
+                ephemeral=True
+            )
+            return
+
+        player = self.get_player(interaction.guild)
+
+        if not player.queue:
+            await interaction.response.send_message("The queue is already empty!", ephemeral=True)
+            return
+
+        count = len(player.queue)
+        player.queue.clear()
+        await interaction.response.send_message(f"Cleared **{count}** songs from the queue!")
 
 
 # Required setup function
