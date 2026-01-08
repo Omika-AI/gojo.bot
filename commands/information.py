@@ -61,6 +61,66 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Economy Commands (Everyone can use)
+    {
+        "name": "/balance",
+        "description": "Check your coin balance and gambling stats",
+        "usage": "/balance or /balance @user",
+        "category": "economy",
+        "permission": None
+    },
+    {
+        "name": "/claimdaily",
+        "description": "Claim daily coins (streak bonus increases rewards)",
+        "usage": "/claimdaily",
+        "category": "economy",
+        "permission": None
+    },
+    {
+        "name": "/leaderboard",
+        "description": "View the top 10 richest users",
+        "usage": "/leaderboard",
+        "category": "economy",
+        "permission": None
+    },
+
+    # Gambling Commands (Everyone can use)
+    {
+        "name": "/blackjack",
+        "description": "Play blackjack against the dealer (1x-1.5x payout)",
+        "usage": "/blackjack bet:100",
+        "category": "gambling",
+        "permission": None
+    },
+    {
+        "name": "/roulette",
+        "description": "Bet on red/black, odd/even, or ranges (2x-3x payout)",
+        "usage": "/roulette bet:100 bet_type:red",
+        "category": "gambling",
+        "permission": None
+    },
+    {
+        "name": "/roulettenumber",
+        "description": "Bet on a specific number 0-36 (36x payout!)",
+        "usage": "/roulettenumber bet:100 number:17",
+        "category": "gambling",
+        "permission": None
+    },
+    {
+        "name": "/coinflip",
+        "description": "Challenge someone to a coinflip duel for coins",
+        "usage": "/coinflip opponent:@user bet:100",
+        "category": "gambling",
+        "permission": None
+    },
+    {
+        "name": "/guessnumber",
+        "description": "Guess 1-50 for 500x payout! (2% chance)",
+        "usage": "/guessnumber bet:50 guess:25",
+        "category": "gambling",
+        "permission": None
+    },
+
     # Music Commands (Everyone can use)
     {
         "name": "/play",
@@ -227,6 +287,13 @@ COMMANDS_REGISTRY = [
         "category": "admin",
         "permission": "administrator"
     },
+    {
+        "name": "/givecoins",
+        "description": "Give coins to a user (preset amounts or custom)",
+        "usage": "/givecoins @user",
+        "category": "admin",
+        "permission": "administrator"
+    },
 
     # Owner Commands (Server Owner only)
     {
@@ -277,6 +344,16 @@ CATEGORY_INFO = {
         "name": "Fun Commands",
         "emoji": "🎮",
         "description": "Entertainment and fun features"
+    },
+    "economy": {
+        "name": "Economy Commands",
+        "emoji": "💰",
+        "description": "Virtual currency and daily rewards"
+    },
+    "gambling": {
+        "name": "Gambling Commands",
+        "emoji": "🎰",
+        "description": "Casino games with virtual coins"
     },
     "music": {
         "name": "Music Commands",
@@ -335,7 +412,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "music", "moderation", "admin", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "moderation", "admin", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -465,23 +542,36 @@ class InformationView(View):
             inline=False
         )
 
+        # Economy System (Everyone)
+        embed.add_field(
+            name="💰 Economy System",
+            value=(
+                "• **Virtual Coins** - Earn free coins (not purchasable with real money)\n"
+                "• **Daily Claims** - Claim coins daily with streak bonuses\n"
+                "• **Leaderboard** - Compete for the top spot\n"
+                "• **Balance Tracking** - View your coins and gambling stats"
+            ),
+            inline=False
+        )
+
+        # Gambling System (Everyone)
+        embed.add_field(
+            name="🎰 Gambling Games",
+            value=(
+                "• **Blackjack** - Classic card game vs dealer (1x-1.5x payout)\n"
+                "• **Roulette** - Bet on colors, numbers, or ranges (2x-36x payout)\n"
+                "• **Coinflip Duel** - Challenge other players for coins\n"
+                "• **Guess the Number** - High risk game with 500x payout!"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
             value=(
                 "• **Daily Quotes** - Inspirational quotes from movies, anime & famous people\n"
                 "• More fun features coming soon!"
-            ),
-            inline=False
-        )
-
-        # General Utilities (Everyone)
-        embed.add_field(
-            name="🔧 Utilities",
-            value=(
-                "• **Help Command** - Quick list of available commands\n"
-                "• **Information** - Detailed bot info and command guide\n"
-                "• **Ping** - Check if the bot is online and responsive"
             ),
             inline=False
         )
@@ -556,6 +646,8 @@ class InformationView(View):
         colors = {
             "general": discord.Color.blue(),
             "fun": discord.Color.gold(),
+            "economy": discord.Color.from_rgb(255, 215, 0),  # Gold
+            "gambling": discord.Color.purple(),
             "music": discord.Color.green(),
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),

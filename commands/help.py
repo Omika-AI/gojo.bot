@@ -75,6 +75,22 @@ class Help(commands.Cog):
             inline=False
         )
 
+        # Economy Commands (Everyone)
+        economy_cmds = "`/balance` `/claimdaily` `/leaderboard`"
+        embed.add_field(
+            name="💰 Economy",
+            value=economy_cmds,
+            inline=False
+        )
+
+        # Gambling Commands (Everyone)
+        gambling_cmds = "`/blackjack` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`"
+        embed.add_field(
+            name="🎰 Gambling",
+            value=gambling_cmds,
+            inline=False
+        )
+
         # Music Commands (Everyone)
         music_cmds = "`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle`"
         embed.add_field(
@@ -94,7 +110,7 @@ class Help(commands.Cog):
 
         # Admin Commands (Admins only)
         if is_admin:
-            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit`"
+            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins`"
             embed.add_field(
                 name="👑 Admin",
                 value=admin_cmds,
