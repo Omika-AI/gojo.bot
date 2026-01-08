@@ -1,10 +1,10 @@
 """
 Music Commands
-Play music from Spotify links or search queries in voice channels
-Uses Spotify API for track info and YouTube for audio streaming
+Play music from YouTube, SoundCloud, or Spotify links in voice channels
+Uses yt-dlp for audio streaming with support for multiple platforms
 
 Commands:
-- /play <query or spotify link> - Play a song or add to queue
+- /play <query or link> - Play a song or add to queue (supports YouTube, SoundCloud, Spotify)
 - /pause - Pause the current song
 - /resume - Resume playback
 - /skip - Skip the current song
@@ -13,6 +13,12 @@ Commands:
 - /nowplaying - Show the currently playing song
 - /volume <0-100> - Adjust the volume
 - /clear - Clear the queue
+- /shuffle - Shuffle the queue
+
+Supported sources:
+- YouTube (default) - Search or direct links
+- SoundCloud - Search or direct links
+- Spotify - Links only (requires API credentials)
 """
 
 import discord
@@ -73,6 +79,13 @@ SPOTIFY_TRACK_PATTERN = re.compile(r'https?://open\.spotify\.com/track/([a-zA-Z0
 SPOTIFY_PLAYLIST_PATTERN = re.compile(r'https?://open\.spotify\.com/playlist/([a-zA-Z0-9]+)')
 SPOTIFY_ALBUM_PATTERN = re.compile(r'https?://open\.spotify\.com/album/([a-zA-Z0-9]+)')
 
+# Regex patterns for SoundCloud URLs
+SOUNDCLOUD_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/.+')
+SOUNDCLOUD_MOBILE_PATTERN = re.compile(r'https?://m\.soundcloud\.com/.+')
+
+# Regex patterns for YouTube URLs
+YOUTUBE_PATTERN = re.compile(r'https?://(www\.)?(youtube\.com|youtu\.be)/.+')
+
 
 # =============================================================================
 # SONG CLASS
@@ -81,12 +94,13 @@ SPOTIFY_ALBUM_PATTERN = re.compile(r'https?://open\.spotify\.com/album/([a-zA-Z0
 class Song:
     """Represents a song in the queue"""
 
-    def __init__(self, title: str, url: str, duration: int, thumbnail: str, requester: discord.Member):
+    def __init__(self, title: str, url: str, duration: int, thumbnail: str, requester: discord.Member, source: str = "youtube"):
         self.title = title
         self.url = url
         self.duration = duration  # in seconds
         self.thumbnail = thumbnail
         self.requester = requester
+        self.source = source  # "youtube", "soundcloud", or "spotify"
 
     @property
     def duration_str(self) -> str:
@@ -137,17 +151,47 @@ class MusicPlayer:
         self.queue.clear()
         self.current = None
 
-    async def add_song(self, query: str, requester: discord.Member) -> Optional[Song]:
-        """Add a song to the queue from a search query or URL"""
+    async def add_song(self, query: str, requester: discord.Member, source: str = "youtube") -> Optional[Song]:
+        """Add a song to the queue from a search query or URL
+
+        Args:
+            query: Song name, URL, or search query
+            requester: The user who requested the song
+            source: Search source - "youtube" or "soundcloud" (ignored if query is a URL)
+        """
         if not self._ytdl:
             return None
 
         try:
+            # Determine the actual source from URL or search prefix
+            actual_source = source
+            search_query = query
+
+            # Check if it's a direct URL (don't add search prefix)
+            is_url = query.startswith('http://') or query.startswith('https://')
+
+            if is_url:
+                # Detect source from URL
+                if SOUNDCLOUD_PATTERN.match(query) or SOUNDCLOUD_MOBILE_PATTERN.match(query):
+                    actual_source = "soundcloud"
+                elif YOUTUBE_PATTERN.match(query):
+                    actual_source = "youtube"
+                # Use URL directly
+                search_query = query
+            else:
+                # It's a search query - add appropriate prefix
+                if source == "soundcloud":
+                    search_query = f"scsearch:{query}"
+                    actual_source = "soundcloud"
+                else:
+                    search_query = f"ytsearch:{query}"
+                    actual_source = "youtube"
+
             # Run yt-dlp in executor to not block
             loop = asyncio.get_event_loop()
             data = await loop.run_in_executor(
                 None,
-                lambda: self._ytdl.extract_info(query, download=False)
+                lambda: self._ytdl.extract_info(search_query, download=False)
             )
 
             if not data:
@@ -160,9 +204,10 @@ class MusicPlayer:
             song = Song(
                 title=data.get('title', 'Unknown'),
                 url=data.get('url') or data.get('webpage_url', ''),
-                duration=data.get('duration', 0),
+                duration=data.get('duration') or 0,
                 thumbnail=data.get('thumbnail', ''),
-                requester=requester
+                requester=requester,
+                source=actual_source
             )
 
             self.queue.append(song)
@@ -181,11 +226,18 @@ class MusicPlayer:
         self.current = self.queue.pop(0)
 
         try:
-            # Get fresh URL (YouTube URLs expire)
+            # Determine search query based on source
+            # Use appropriate search prefix to get fresh URL (URLs can expire)
+            if self.current.source == "soundcloud":
+                search_query = f"scsearch:{self.current.title}"
+            else:
+                search_query = f"ytsearch:{self.current.title}"
+
+            # Get fresh URL
             loop = asyncio.get_event_loop()
             data = await loop.run_in_executor(
                 None,
-                lambda: self._ytdl.extract_info(self.current.title, download=False)
+                lambda: self._ytdl.extract_info(search_query, download=False)
             )
 
             if 'entries' in data:
@@ -345,9 +397,16 @@ class Music(commands.Cog):
             return None
         return interaction.user.voice.channel
 
-    @app_commands.command(name="play", description="Play a song from Spotify link or search query")
-    @app_commands.describe(query="Song name, YouTube URL, or Spotify link")
-    async def play(self, interaction: discord.Interaction, query: str):
+    @app_commands.command(name="play", description="Play a song from YouTube, SoundCloud, or Spotify")
+    @app_commands.describe(
+        query="Song name, URL, or link (YouTube, SoundCloud, or Spotify)",
+        source="Where to search for the song (default: YouTube)"
+    )
+    @app_commands.choices(source=[
+        app_commands.Choice(name="YouTube", value="youtube"),
+        app_commands.Choice(name="SoundCloud", value="soundcloud")
+    ])
+    async def play(self, interaction: discord.Interaction, query: str, source: str = "youtube"):
         """Play a song or add it to the queue"""
         log_command(str(interaction.user), interaction.user.id, f"play {query}", interaction.guild.name)
 
@@ -373,47 +432,80 @@ class Music(commands.Cog):
             await interaction.followup.send("❌ Failed to connect to voice channel!")
             return
 
-        # Check for Spotify links
+        # Detect URL type and handle accordingly
         search_queries = []
+        detected_source = source  # Use user-selected source by default
 
-        # Spotify track
-        track_match = SPOTIFY_TRACK_PATTERN.match(query)
-        if track_match and self.spotify.is_available():
-            track_info = self.spotify.get_track_info(track_match.group(1))
-            if track_info:
-                search_queries.append(track_info['search_query'])
+        # Check for SoundCloud URLs (direct play)
+        if SOUNDCLOUD_PATTERN.match(query) or SOUNDCLOUD_MOBILE_PATTERN.match(query):
+            search_queries.append(query)
+            detected_source = "soundcloud"
+            await interaction.followup.send("🔊 Found SoundCloud link...")
+
+        # Check for YouTube URLs (direct play)
+        elif YOUTUBE_PATTERN.match(query):
+            search_queries.append(query)
+            detected_source = "youtube"
+            await interaction.followup.send("▶️ Found YouTube link...")
+
+        # Check for Spotify links
+        elif SPOTIFY_TRACK_PATTERN.match(query):
+            track_match = SPOTIFY_TRACK_PATTERN.match(query)
+            if self.spotify.is_available():
+                track_info = self.spotify.get_track_info(track_match.group(1))
+                if track_info:
+                    search_queries.append(track_info['search_query'])
+                    await interaction.followup.send(
+                        f"🎵 Found Spotify track: **{track_info['name']}** by **{track_info['artist']}**"
+                    )
+            else:
                 await interaction.followup.send(
-                    f"🎵 Found Spotify track: **{track_info['name']}** by **{track_info['artist']}**"
+                    "❌ Spotify API is not available. Try searching by song name instead!",
                 )
+                return
 
-        # Spotify playlist
-        playlist_match = SPOTIFY_PLAYLIST_PATTERN.match(query)
-        if playlist_match and self.spotify.is_available():
-            tracks = self.spotify.get_playlist_tracks(playlist_match.group(1))
-            if tracks:
-                search_queries.extend([t['search_query'] for t in tracks])
+        elif SPOTIFY_PLAYLIST_PATTERN.match(query):
+            playlist_match = SPOTIFY_PLAYLIST_PATTERN.match(query)
+            if self.spotify.is_available():
+                tracks = self.spotify.get_playlist_tracks(playlist_match.group(1))
+                if tracks:
+                    search_queries.extend([t['search_query'] for t in tracks])
+                    await interaction.followup.send(
+                        f"📋 Adding **{len(tracks)}** songs from Spotify playlist..."
+                    )
+            else:
                 await interaction.followup.send(
-                    f"📋 Adding **{len(tracks)}** songs from Spotify playlist..."
+                    "❌ Spotify API is not available. Try searching by song name instead!",
                 )
+                return
 
-        # Spotify album
-        album_match = SPOTIFY_ALBUM_PATTERN.match(query)
-        if album_match and self.spotify.is_available():
-            tracks = self.spotify.get_album_tracks(album_match.group(1))
-            if tracks:
-                search_queries.extend([t['search_query'] for t in tracks])
+        elif SPOTIFY_ALBUM_PATTERN.match(query):
+            album_match = SPOTIFY_ALBUM_PATTERN.match(query)
+            if self.spotify.is_available():
+                tracks = self.spotify.get_album_tracks(album_match.group(1))
+                if tracks:
+                    search_queries.extend([t['search_query'] for t in tracks])
+                    await interaction.followup.send(
+                        f"💿 Adding **{len(tracks)}** songs from Spotify album..."
+                    )
+            else:
                 await interaction.followup.send(
-                    f"💿 Adding **{len(tracks)}** songs from Spotify album..."
+                    "❌ Spotify API is not available. Try searching by song name instead!",
                 )
+                return
 
-        # Regular search query
+        # Regular search query (not a URL)
         if not search_queries:
             search_queries.append(query)
+            # Show searching message with source
+            source_name = "SoundCloud" if source == "soundcloud" else "YouTube"
+            source_emoji = "🔊" if source == "soundcloud" else "▶️"
+            await interaction.followup.send(f"{source_emoji} Searching **{source_name}** for: `{query}`...")
 
         # Add songs to queue
         added_songs = []
         for search_query in search_queries:
-            song = await player.add_song(search_query, interaction.user)
+            song = await player.add_song(search_query, interaction.user, detected_source)
             if song:
                 added_songs.append(song)
 
@@ -424,27 +516,45 @@ class Music(commands.Cog):
         # Start playing if not already
         if not player.voice_client.is_playing() and not player.voice_client.is_paused():
             await player.play_next()
+
+            # Choose color and emoji based on source
+            source_info = {
+                "youtube": {"color": discord.Color.red(), "emoji": "▶️", "name": "YouTube"},
+                "soundcloud": {"color": discord.Color.orange(), "emoji": "🔊", "name": "SoundCloud"},
+                "spotify": {"color": discord.Color.green(), "emoji": "🎵", "name": "Spotify"}
+            }.get(player.current.source, {"color": discord.Color.green(), "emoji": "🎵", "name": "Unknown"})
+
             embed = discord.Embed(
-                title="🎵 Now Playing",
+                title=f"{source_info['emoji']} Now Playing",
                 description=f"**{player.current.title}**",
-                color=discord.Color.green()
+                color=source_info['color']
             )
             if player.current.thumbnail:
                 embed.set_thumbnail(url=player.current.thumbnail)
             embed.add_field(name="Duration", value=player.current.duration_str, inline=True)
             embed.add_field(name="Requested by", value=player.current.requester.mention, inline=True)
+            embed.add_field(name="Source", value=source_info['name'], inline=True)
             embed.add_field(name="Queue", value=f"{len(player.queue)} songs", inline=True)
             await interaction.followup.send(embed=embed)
         else:
             if len(added_songs) == 1:
                 song = added_songs[0]
+
+                # Choose color based on source
+                source_info = {
+                    "youtube": {"color": discord.Color.red(), "name": "YouTube"},
+                    "soundcloud": {"color": discord.Color.orange(), "name": "SoundCloud"},
+                    "spotify": {"color": discord.Color.green(), "name": "Spotify"}
+                }.get(song.source, {"color": discord.Color.blue(), "name": "Unknown"})
+
                 embed = discord.Embed(
                     title="➕ Added to Queue",
                     description=f"**{song.title}**",
-                    color=discord.Color.blue()
+                    color=source_info['color']
                 )
                 embed.add_field(name="Position", value=f"#{len(player.queue)}", inline=True)
                 embed.add_field(name="Duration", value=song.duration_str, inline=True)
+                embed.add_field(name="Source", value=source_info['name'], inline=True)
                 await interaction.followup.send(embed=embed)
             else:
                 await interaction.followup.send(
@@ -562,10 +672,17 @@ class Music(commands.Cog):
             await interaction.response.send_message("❌ Nothing is playing!", ephemeral=True)
             return
 
+        # Choose color and emoji based on source
+        source_info = {
+            "youtube": {"color": discord.Color.red(), "emoji": "▶️", "name": "YouTube"},
+            "soundcloud": {"color": discord.Color.orange(), "emoji": "🔊", "name": "SoundCloud"},
+            "spotify": {"color": discord.Color.green(), "emoji": "🎵", "name": "Spotify"}
+        }.get(player.current.source, {"color": discord.Color.green(), "emoji": "🎵", "name": "Unknown"})
+
         embed = discord.Embed(
-            title="🎵 Now Playing",
+            title=f"{source_info['emoji']} Now Playing",
             description=f"**{player.current.title}**",
-            color=discord.Color.green()
+            color=source_info['color']
         )
 
         if player.current.thumbnail:
@@ -573,6 +690,7 @@ class Music(commands.Cog):
 
         embed.add_field(name="Duration", value=player.current.duration_str, inline=True)
         embed.add_field(name="Requested by", value=player.current.requester.mention, inline=True)
+        embed.add_field(name="Source", value=source_info['name'], inline=True)
         embed.add_field(name="Volume", value=f"{int(player.volume * 100)}%", inline=True)
         embed.add_field(name="Queue", value=f"{len(player.queue)} songs remaining", inline=True)
 

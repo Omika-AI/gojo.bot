@@ -64,8 +64,8 @@ COMMANDS_REGISTRY = [
     # Music Commands (Everyone can use)
     {
         "name": "/play",
-        "description": "Play a song from Spotify link or search query",
-        "usage": "/play Bohemian Rhapsody OR /play <spotify link>",
+        "description": "Play a song from YouTube, SoundCloud, or Spotify",
+        "usage": "/play query:song name source:YouTube OR /play query:<soundcloud link>",
         "category": "music",
         "permission": None
     },
@@ -477,10 +477,11 @@ class InformationView(View):
         embed.add_field(
             name="🎵 Music System",
             value=(
-                "• **Spotify Integration** - Play songs from Spotify links\n"
+                "• **Multi-Platform** - YouTube, SoundCloud, and Spotify support\n"
                 "• **Search & Play** - Search for any song by name\n"
+                "• **Direct Links** - Paste YouTube or SoundCloud URLs\n"
                 "• **Queue System** - Queue up multiple songs\n"
-                "• **Playback Controls** - Pause, resume, skip, stop\n"
+                "• **Playback Controls** - Pause, resume, skip, shuffle\n"
                 "• **Volume Control** - Adjust volume as needed"
             ),
             inline=False
