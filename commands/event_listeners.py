@@ -64,6 +64,9 @@ class EventListeners(commands.Cog):
         else:
             return "Member"
 
+    # Commands that should not be logged (to avoid spam/recursion)
+    EXCLUDED_COMMANDS = ["searchlogs", "logstats"]
+
     @commands.Cog.listener()
     async def on_app_command_completion(
         self,
@@ -71,17 +74,26 @@ class EventListeners(commands.Cog):
         command: discord.app_commands.Command
     ):
         """Log slash command usage"""
+        # Skip excluded commands (like searchlogs to avoid spam)
+        if command.name in self.EXCLUDED_COMMANDS:
+            return
+
+        logger.info(f"Command completed: /{command.name} by {interaction.user}")
+
         # Skip if no guild (DMs)
         if not interaction.guild:
+            logger.info("Skipping command log - no guild (DM)")
             return
 
         # Skip if logging not enabled for commands
         if not is_logging_enabled(interaction.guild.id, "commands"):
+            logger.info(f"Skipping command log - logging not enabled for guild {interaction.guild.id}")
             return
 
         try:
             # Get the user type
             user_type = self._get_user_type(interaction.user)
+            logger.info(f"Logging command /{command.name} by {interaction.user} ({user_type})")
 
             await self.event_logger.log_command_use(
                 guild_id=interaction.guild.id,
@@ -90,6 +102,7 @@ class EventListeners(commands.Cog):
                 channel=interaction.channel,
                 user_type=user_type
             )
+            logger.info(f"Successfully logged command /{command.name}")
         except Exception as e:
             logger.error(f"Error logging command usage: {e}")
 

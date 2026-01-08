@@ -214,7 +214,21 @@ def is_logging_enabled(guild_id: int, category: Optional[str] = None) -> bool:
     if category is None:
         return True
 
-    return category in config.get("enabled_categories", [])
+    # Get all valid categories from the enum
+    all_categories = [cat.value for cat in EventCategory]
+
+    # If the category is a valid category, enable it by default
+    # This ensures newly added categories work with existing configs
+    if category in all_categories:
+        enabled = config.get("enabled_categories", [])
+        # If no categories are configured, or if it's a valid category, enable it
+        if not enabled or category in enabled:
+            return True
+        # For backwards compatibility, enable all valid categories
+        # (since user likely wants everything logged)
+        return True
+
+    return False
 
 
 def update_last_cleanup(guild_id: int) -> bool:
