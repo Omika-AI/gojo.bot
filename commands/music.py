@@ -4,7 +4,8 @@ Play music from SoundCloud in voice channels
 Uses yt-dlp for audio streaming
 
 Commands:
-- /play <query or link> - Play a song or add to queue
+- /play <query or link> - Play a song immediately (or add to queue if something is playing)
+- /addsong <query or link> - Add a song to the queue
 - /playlist <url> - Play a SoundCloud playlist or album
 - /queue - View the current queue
 - /nowplaying - Show the currently playing song
@@ -14,7 +15,7 @@ Commands:
 - /stop - Stop music and leave voice channel
 - /volume <0-100> - Adjust the volume
 - /shuffle - Shuffle the queue
-- /clear - Clear the queue
+- /clearqueue - Clear the queue (mods only)
 """
 
 import discord
@@ -337,11 +338,12 @@ class LyricsButton(Button):
 class SongConfirmView(View):
     """View for confirming a song before adding to queue"""
 
-    def __init__(self, song_data: dict, requester: discord.Member, player, timeout: float = 60):
+    def __init__(self, song_data: dict, requester: discord.Member, player, play_next: bool = False, timeout: float = 60):
         super().__init__(timeout=timeout)
         self.song_data = song_data
         self.requester = requester
         self.player = player
+        self.play_next = play_next  # If True, play immediately or insert at front of queue
         self.confirmed = None  # None = pending, True = confirmed, False = cancelled
         self.message = None
 
@@ -392,6 +394,13 @@ class SongConfirmView(View):
         song = self._create_song_from_data()
         self.player.queue.append(song)
 
+        # Check if we need to start playing
+        nothing_playing = not self.player.voice_client.is_playing() and not self.player.voice_client.is_paused()
+
+        # If play_next is True and something is playing, move song to front of queue
+        if self.play_next and not nothing_playing and len(self.player.queue) > 1:
+            self.player.queue.insert(0, self.player.queue.pop())
+
         # Update the message
         embed = discord.Embed(
             title="Song Added",
@@ -401,18 +410,17 @@ class SongConfirmView(View):
         embed.add_field(name="Artist", value=song.artist, inline=True)
         embed.add_field(name="Duration", value=song.duration_str, inline=True)
 
-        # Check if we need to start playing
-        should_play = not self.player.voice_client.is_playing() and not self.player.voice_client.is_paused()
-
-        if should_play:
+        if nothing_playing:
             embed.add_field(name="Status", value="Starting playback...", inline=False)
+        elif self.play_next:
+            embed.add_field(name="Status", value="Playing next!", inline=True)
         else:
             embed.add_field(name="Position", value=f"#{len(self.player.queue)}", inline=True)
 
         await interaction.response.edit_message(embed=embed, view=None)
 
         # Start playing if needed
-        if should_play:
+        if nothing_playing:
             await self.player.play_next()
 
         self.stop()
@@ -1011,10 +1019,10 @@ class Music(commands.Cog):
             return None
         return interaction.user.voice.channel
 
-    @app_commands.command(name="play", description="Play a song from SoundCloud")
+    @app_commands.command(name="play", description="Play a song immediately from SoundCloud")
     @app_commands.describe(query="Song name or SoundCloud link")
     async def play(self, interaction: discord.Interaction, query: str):
-        """Play a song or add it to the queue"""
+        """Play a song immediately - if something is playing, it plays next"""
         log_command(str(interaction.user), interaction.user.id, f"play {query}", interaction.guild.name)
 
         # Check dependencies
@@ -1042,34 +1050,146 @@ class Music(commands.Cog):
             await interaction.followup.send("Failed to connect to voice channel!")
             return
 
-        # Check if it's a direct URL or a search query
-        is_url = SOUNDCLOUD_PATTERN.match(query) or SOUNDCLOUD_MOBILE_PATTERN.match(query)
+        # Check if it's a URL (any http/https link)
+        is_url = query.startswith('http://') or query.startswith('https://')
 
         if is_url:
             # Direct URL - add immediately without confirmation
-            await interaction.followup.send("Found SoundCloud link, adding to queue...")
+            await interaction.followup.send("Loading song from link...")
 
             song = await player.add_song(query, interaction.user)
 
             if not song:
-                await interaction.followup.send("Couldn't load the song from that URL!")
+                await interaction.followup.send(
+                    "Couldn't load the song from that URL!\n"
+                    "Make sure it's a valid SoundCloud link."
+                )
                 return
 
-            # Start playing if not already
-            if not player.voice_client.is_playing() and not player.voice_client.is_paused():
-                await player.play_next()
-            else:
+            # If something is playing, move this song to front of queue (play next)
+            if player.voice_client.is_playing() or player.voice_client.is_paused():
+                # Move from end to front of queue
+                if len(player.queue) > 1:
+                    player.queue.insert(0, player.queue.pop())
+
                 embed = discord.Embed(
-                    title="Added to Queue",
+                    title="Playing Next",
                     description=f"**{song.title}**",
-                    color=discord.Color.orange()
+                    color=discord.Color.green()
                 )
                 embed.add_field(name="Artist", value=song.artist, inline=True)
-                embed.add_field(name="Position", value=f"#{len(player.queue)}", inline=True)
                 embed.add_field(name="Duration", value=song.duration_str, inline=True)
                 if song.thumbnail:
                     embed.set_thumbnail(url=song.thumbnail)
                 await interaction.followup.send(embed=embed)
+            else:
+                # Nothing playing, start immediately
+                await player.play_next()
+        else:
+            # Search query - show confirmation before adding
+            await interaction.followup.send(f"Searching **SoundCloud** for: `{query}`...")
+
+            # Search without adding to queue
+            song_data = await player.search_song(query)
+
+            if not song_data:
+                await interaction.followup.send("Couldn't find any songs on SoundCloud!")
+                return
+
+            # Extract info for display
+            title = song_data.get('title', 'Unknown')
+            artist = song_data.get('uploader', song_data.get('artist', 'Unknown Artist'))
+            duration = song_data.get('duration') or 0
+            thumbnail = song_data.get('thumbnail', '')
+
+            # Format duration
+            if duration < 3600:
+                duration_str = f"{duration // 60}:{duration % 60:02d}"
+            else:
+                hours = duration // 3600
+                minutes = (duration % 3600) // 60
+                seconds = duration % 60
+                duration_str = f"{hours}:{minutes:02d}:{seconds:02d}"
+
+            # Create confirmation embed
+            embed = discord.Embed(
+                title="Is this the right song?",
+                description=f"**{title}**",
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="Artist", value=artist, inline=True)
+            embed.add_field(name="Duration", value=duration_str, inline=True)
+            if thumbnail:
+                embed.set_thumbnail(url=thumbnail)
+            embed.set_footer(text="Click Confirm to play, or Cancel to search again")
+
+            # Create confirmation view - pass play_next=True to play immediately
+            view = SongConfirmView(song_data, interaction.user, player, play_next=True)
+            msg = await interaction.followup.send(embed=embed, view=view)
+            view.message = msg
+
+    @app_commands.command(name="addsong", description="Add a song to the queue")
+    @app_commands.describe(query="Song name or SoundCloud link")
+    async def addsong(self, interaction: discord.Interaction, query: str):
+        """Add a song to the queue (doesn't play immediately)"""
+        log_command(str(interaction.user), interaction.user.id, f"addsong {query}", interaction.guild.name)
+
+        # Check dependencies
+        if not YTDLP_AVAILABLE:
+            await interaction.response.send_message(
+                "Music features are not available. yt-dlp is not installed.",
+                ephemeral=True
+            )
+            return
+
+        # Check voice channel
+        voice_channel = await self._check_voice(interaction)
+        if not voice_channel:
+            return
+
+        await interaction.response.defer()
+
+        player = self.get_player(interaction.guild)
+
+        # Set the text channel for now playing messages
+        player.text_channel = interaction.channel
+
+        # Connect to voice channel
+        if not await player.connect(voice_channel):
+            await interaction.followup.send("Failed to connect to voice channel!")
+            return
+
+        # Check if it's a URL (any http/https link)
+        is_url = query.startswith('http://') or query.startswith('https://')
+
+        if is_url:
+            # Direct URL - add immediately without confirmation
+            await interaction.followup.send("Adding song to queue...")
+
+            song = await player.add_song(query, interaction.user)
+
+            if not song:
+                await interaction.followup.send(
+                    "Couldn't load the song from that URL!\n"
+                    "Make sure it's a valid SoundCloud link."
+                )
+                return
+
+            embed = discord.Embed(
+                title="Added to Queue",
+                description=f"**{song.title}**",
+                color=discord.Color.orange()
+            )
+            embed.add_field(name="Artist", value=song.artist, inline=True)
+            embed.add_field(name="Position", value=f"#{len(player.queue)}", inline=True)
+            embed.add_field(name="Duration", value=song.duration_str, inline=True)
+            if song.thumbnail:
+                embed.set_thumbnail(url=song.thumbnail)
+            await interaction.followup.send(embed=embed)
+
+            # Start playing if nothing is playing
+            if not player.voice_client.is_playing() and not player.voice_client.is_paused():
+                await player.play_next()
         else:
             # Search query - show confirmation before adding
             await interaction.followup.send(f"Searching **SoundCloud** for: `{query}`...")
@@ -1108,8 +1228,8 @@ class Music(commands.Cog):
                 embed.set_thumbnail(url=thumbnail)
             embed.set_footer(text="Click Confirm to add to queue, or Cancel to search again")
 
-            # Create confirmation view
-            view = SongConfirmView(song_data, interaction.user, player)
+            # Create confirmation view - play_next=False to just add to queue
+            view = SongConfirmView(song_data, interaction.user, player, play_next=False)
             msg = await interaction.followup.send(embed=embed, view=view)
             view.message = msg
 
@@ -1350,21 +1470,6 @@ class Music(commands.Cog):
 
         emoji = "🔇" if level == 0 else "🔈" if level < 33 else "🔉" if level < 66 else "🔊"
         await interaction.response.send_message(f"{emoji} Volume set to **{level}%**")
-
-    @app_commands.command(name="clear", description="Clear the music queue")
-    async def clear(self, interaction: discord.Interaction):
-        """Clear the queue"""
-        log_command(str(interaction.user), interaction.user.id, "clear", interaction.guild.name)
-
-        player = self.get_player(interaction.guild)
-
-        if not player.queue:
-            await interaction.response.send_message("❌ The queue is already empty!", ephemeral=True)
-            return
-
-        count = len(player.queue)
-        player.queue.clear()
-        await interaction.response.send_message(f"🗑️ Cleared **{count}** songs from the queue!")
 
     @app_commands.command(name="shuffle", description="Shuffle the music queue")
     async def shuffle(self, interaction: discord.Interaction):

@@ -64,8 +64,15 @@ COMMANDS_REGISTRY = [
     # Music Commands (Everyone can use)
     {
         "name": "/play",
-        "description": "Play a song from SoundCloud",
+        "description": "Play a song immediately (or next if something is playing)",
         "usage": "/play query:song name OR /play query:<soundcloud link>",
+        "category": "music",
+        "permission": None
+    },
+    {
+        "name": "/addsong",
+        "description": "Add a song to the queue",
+        "usage": "/addsong query:song name OR /addsong query:<soundcloud link>",
         "category": "music",
         "permission": None
     },
@@ -133,11 +140,11 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
     {
-        "name": "/clear",
-        "description": "Clear all songs from the queue",
-        "usage": "/clear",
+        "name": "/clearqueue",
+        "description": "Clear all songs from the queue (Mods only)",
+        "usage": "/clearqueue",
         "category": "music",
-        "permission": None
+        "permission": "manage_messages"
     },
 
     # Moderation Commands (Require specific permissions)
