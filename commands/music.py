@@ -87,31 +87,125 @@ SOUNDCLOUD_ALBUM_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/[^/]+/a
 
 
 # =============================================================================
-# LYRICS FETCHER
+# LYRICS FETCHER (Genius + fallbacks)
 # =============================================================================
 
-async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
-    """Fetch lyrics from multiple APIs"""
+def _clean_lyrics_text(text: str) -> str:
+    """Clean up lyrics text from HTML/formatting artifacts"""
+    # Remove [Verse], [Chorus] etc. markers if unwanted (keep them for now)
+    # Remove excessive whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+async def _fetch_genius_lyrics(artist: str, title: str) -> Optional[str]:
+    """Fetch lyrics from Genius by searching and scraping"""
+    import urllib.parse
+
     try:
-        # Clean up artist and title for search - remove common extras
+        search_query = urllib.parse.quote(f"{artist} {title}")
+        search_url = f"https://api.genius.com/search?q={search_query}"
+
+        # Genius API requires a token, but we can use their web search
+        # Try the unofficial API endpoint that doesn't require auth
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        async with aiohttp.ClientSession() as session:
+            # Use Genius web search
+            web_search_url = f"https://genius.com/api/search/multi?q={search_query}"
+            async with session.get(web_search_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status != 200:
+                    return None
+
+                data = await response.json()
+
+                # Find the first song result
+                sections = data.get('response', {}).get('sections', [])
+                song_url = None
+
+                for section in sections:
+                    if section.get('type') == 'song':
+                        hits = section.get('hits', [])
+                        if hits:
+                            song_url = hits[0].get('result', {}).get('url')
+                            break
+
+                if not song_url:
+                    return None
+
+                # Fetch the lyrics page
+                async with session.get(song_url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as page_response:
+                    if page_response.status != 200:
+                        return None
+
+                    html = await page_response.text()
+
+                    # Extract lyrics from the page
+                    # Genius uses data-lyrics-container="true" for lyrics
+                    lyrics_matches = re.findall(
+                        r'<div[^>]*data-lyrics-container="true"[^>]*>(.*?)</div>',
+                        html,
+                        re.DOTALL
+                    )
+
+                    if not lyrics_matches:
+                        # Try alternative pattern
+                        lyrics_matches = re.findall(
+                            r'class="Lyrics__Container[^"]*"[^>]*>(.*?)</div>',
+                            html,
+                            re.DOTALL
+                        )
+
+                    if lyrics_matches:
+                        # Clean HTML tags from lyrics
+                        lyrics = ' '.join(lyrics_matches)
+                        lyrics = re.sub(r'<br\s*/?>', '\n', lyrics)
+                        lyrics = re.sub(r'<[^>]+>', '', lyrics)
+                        lyrics = lyrics.replace('&amp;', '&')
+                        lyrics = lyrics.replace('&quot;', '"')
+                        lyrics = lyrics.replace('&#x27;', "'")
+                        lyrics = lyrics.replace('&nbsp;', ' ')
+                        lyrics = _clean_lyrics_text(lyrics)
+
+                        if len(lyrics) > 50:
+                            logger.debug(f"Found lyrics on Genius")
+                            return lyrics
+
+    except Exception as e:
+        logger.debug(f"Genius lyrics failed: {e}")
+
+    return None
+
+
+async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
+    """Fetch lyrics from Genius (primary) with fallbacks"""
+    import urllib.parse
+
+    try:
+        # Clean up artist and title for search
         clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip()
         clean_title = re.sub(r'(feat\.?|ft\.?|featuring).*', '', clean_title, flags=re.IGNORECASE).strip()
-        clean_title = re.sub(r'\s*-\s*$', '', clean_title).strip()  # Remove trailing dash
+        clean_title = re.sub(r'\s*-\s*$', '', clean_title).strip()
 
         clean_artist = re.sub(r'\(.*?\)|\[.*?\]', '', artist).strip()
-        # Remove "Official" and similar suffixes from artist name
         clean_artist = re.sub(r'\s*(official|music|vevo|records).*', '', clean_artist, flags=re.IGNORECASE).strip()
 
         logger.debug(f"Searching lyrics for: '{clean_artist}' - '{clean_title}'")
 
-        # Try lrclib.net API first (free, no auth required)
+        # Try Genius first (best lyrics database)
+        lyrics = await _fetch_genius_lyrics(clean_artist, clean_title)
+        if lyrics:
+            return lyrics
+
+        # Fallback: Try lrclib.net API
         try:
-            import urllib.parse
             encoded_query = urllib.parse.quote(f"{clean_artist} {clean_title}")
             url = f"https://lrclib.net/api/search?q={encoded_query}"
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as response:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data and len(data) > 0:
@@ -123,15 +217,14 @@ async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
         except Exception as e:
             logger.debug(f"lrclib.net failed: {e}")
 
-        # Try lyrics.ovh API as fallback
+        # Fallback: Try lyrics.ovh API
         try:
-            import urllib.parse
             encoded_artist = urllib.parse.quote(clean_artist)
             encoded_title = urllib.parse.quote(clean_title)
             fallback_url = f"https://api.lyrics.ovh/v1/{encoded_artist}/{encoded_title}"
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(fallback_url, timeout=aiohttp.ClientTimeout(total=8)) as response:
+                async with session.get(fallback_url, timeout=aiohttp.ClientTimeout(total=5)) as response:
                     if response.status == 200:
                         data = await response.json()
                         lyrics = data.get('lyrics')
@@ -140,24 +233,6 @@ async def fetch_lyrics(artist: str, title: str) -> Optional[str]:
                             return lyrics
         except Exception as e:
             logger.debug(f"lyrics.ovh failed: {e}")
-
-        # Try with just the title (sometimes artist name doesn't match)
-        try:
-            encoded_title_only = urllib.parse.quote(clean_title)
-            url = f"https://lrclib.net/api/search?q={encoded_title_only}"
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data and len(data) > 0:
-                            for result in data:
-                                plain_lyrics = result.get('plainLyrics')
-                                if plain_lyrics and len(plain_lyrics) > 50:
-                                    logger.debug(f"Found lyrics on lrclib.net (title only)")
-                                    return plain_lyrics
-        except Exception as e:
-            logger.debug(f"lrclib.net (title only) failed: {e}")
 
     except Exception as e:
         logger.debug(f"Failed to fetch lyrics: {e}")
@@ -636,6 +711,9 @@ class MusicPlayer:
         # Track now playing message for updates
         self.now_playing_message: Optional[discord.Message] = None
         self.text_channel: Optional[discord.TextChannel] = None
+        # Skip handling - if skip is called while loading, don't play
+        self._skip_requested = False
+        self._loading = False
 
     async def connect(self, channel: discord.VoiceChannel) -> bool:
         """Connect to a voice channel"""
@@ -849,8 +927,8 @@ class MusicPlayer:
         if not self.text_channel:
             return
 
-        # Fetch lyrics in background
-        await song.fetch_lyrics_async()
+        # Fetch lyrics in background (non-blocking) - will be available when user clicks button
+        asyncio.create_task(song.fetch_lyrics_async())
 
         # Build enhanced embed
         embed = discord.Embed(
@@ -906,11 +984,16 @@ class MusicPlayer:
 
     async def play_next(self):
         """Play the next song in the queue"""
+        # Reset skip flag at start
+        self._skip_requested = False
+        self._loading = True
+
         # Store the previous song to update "formerly played"
         previous_song = self.current
 
         if not self.queue or not self.voice_client:
             self.current = None
+            self._loading = False
             # Update the last message to "formerly played" if there was a song
             if previous_song:
                 await self._update_formerly_played(previous_song)
@@ -933,11 +1016,28 @@ class MusicPlayer:
                 lambda: self._ytdl.extract_info(search_query, download=False)
             )
 
+            # Check if skip was requested while loading
+            if self._skip_requested:
+                logger.info(f"Skip requested during load, skipping: {self.current.title}")
+                self._loading = False
+                self._skip_requested = False
+                await self.play_next()
+                return
+
             if 'entries' in data:
                 data = data['entries'][0]
 
             audio_url = data.get('url')
             if not audio_url:
+                self._loading = False
+                await self.play_next()
+                return
+
+            # Check again for skip after getting URL
+            if self._skip_requested:
+                logger.info(f"Skip requested during load, skipping: {self.current.title}")
+                self._loading = False
+                self._skip_requested = False
                 await self.play_next()
                 return
 
@@ -949,6 +1049,9 @@ class MusicPlayer:
             # Create audio source
             source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS)
             source = discord.PCMVolumeTransformer(source, volume=self.volume)
+
+            # Mark loading complete before playing
+            self._loading = False
 
             # Send now playing message
             await self._send_now_playing(self.current)
@@ -968,6 +1071,7 @@ class MusicPlayer:
 
         except Exception as e:
             logger.error(f"Error playing song: {e}")
+            self._loading = False
             await self.play_next()
 
     def pause(self):
@@ -981,9 +1085,16 @@ class MusicPlayer:
             self.voice_client.resume()
 
     def skip(self):
-        """Skip current song"""
+        """Skip current song (or skip loading song)"""
+        # If still loading, set flag to skip when done loading
+        if self._loading:
+            self._skip_requested = True
+            return True  # Indicate skip was queued
+
         if self.voice_client and self.voice_client.is_playing():
             self.voice_client.stop()
+            return True
+        return False
 
     def set_volume(self, volume: float):
         """Set volume (0.0 to 1.0)"""
@@ -1342,13 +1453,25 @@ class Music(commands.Cog):
 
         player = self.get_player(interaction.guild)
 
-        if not player.voice_client or not player.current:
+        # Check if something is loading or playing
+        if not player.voice_client:
+            await interaction.response.send_message("❌ Not connected to voice!", ephemeral=True)
+            return
+
+        if not player.current and not player._loading:
             await interaction.response.send_message("❌ Nothing is playing!", ephemeral=True)
             return
 
-        skipped_title = player.current.title
-        player.skip()
-        await interaction.response.send_message(f"⏭️ Skipped **{skipped_title}**")
+        skipped_title = player.current.title if player.current else "Loading song"
+
+        if player._loading:
+            # Song is still loading - mark for skip
+            player.skip()
+            await interaction.response.send_message(f"⏭️ Skipping **{skipped_title}** (was loading)")
+        else:
+            # Song is playing - stop it
+            player.skip()
+            await interaction.response.send_message(f"⏭️ Skipped **{skipped_title}**")
 
     @app_commands.command(name="stop", description="Stop music and leave the voice channel")
     async def stop(self, interaction: discord.Interaction):
