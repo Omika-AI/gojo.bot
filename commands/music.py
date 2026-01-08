@@ -188,7 +188,7 @@ class Song:
     ):
         self.title = title
         self.url = url
-        self.duration = duration  # in seconds
+        self.duration = int(duration) if duration else 0  # in seconds (ensure int)
         self.thumbnail = thumbnail
         self.requester = requester
         self.artist = artist
@@ -1099,7 +1099,7 @@ class Music(commands.Cog):
             # Extract info for display
             title = song_data.get('title', 'Unknown')
             artist = song_data.get('uploader', song_data.get('artist', 'Unknown Artist'))
-            duration = song_data.get('duration') or 0
+            duration = int(song_data.get('duration') or 0)
             thumbnail = song_data.get('thumbnail', '')
 
             # Format duration
@@ -1204,7 +1204,7 @@ class Music(commands.Cog):
             # Extract info for display
             title = song_data.get('title', 'Unknown')
             artist = song_data.get('uploader', song_data.get('artist', 'Unknown Artist'))
-            duration = song_data.get('duration') or 0
+            duration = int(song_data.get('duration') or 0)
             thumbnail = song_data.get('thumbnail', '')
 
             # Format duration
