@@ -5,15 +5,16 @@ Uses yt-dlp for audio streaming
 
 Commands:
 - /play <query or link> - Play a song or add to queue
+- /playlist <url> - Play a SoundCloud playlist or album
+- /queue - View the current queue
+- /nowplaying - Show the currently playing song
 - /pause - Pause the current song
 - /resume - Resume playback
 - /skip - Skip the current song
 - /stop - Stop music and leave voice channel
-- /queue - View the current queue
-- /nowplaying - Show the currently playing song
 - /volume <0-100> - Adjust the volume
-- /clear - Clear the queue
 - /shuffle - Shuffle the queue
+- /clear - Clear the queue
 """
 
 import discord
@@ -41,7 +42,7 @@ except ImportError:
 # CONFIGURATION
 # =============================================================================
 
-# yt-dlp options for audio extraction
+# yt-dlp options for audio extraction (single tracks)
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -55,6 +56,19 @@ YTDL_OPTIONS = {
     'extract_flat': False,
 }
 
+# yt-dlp options for playlists/albums
+YTDL_PLAYLIST_OPTIONS = {
+    'format': 'bestaudio/best',
+    'noplaylist': False,  # Allow playlists
+    'nocheckcertificate': True,
+    'ignoreerrors': True,  # Skip unavailable tracks
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'source_address': '0.0.0.0',
+    'extract_flat': 'in_playlist',  # Get playlist entries without full extraction
+}
+
 # FFmpeg options for audio playback
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -64,6 +78,10 @@ FFMPEG_OPTIONS = {
 # Regex patterns for SoundCloud URLs
 SOUNDCLOUD_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/.+')
 SOUNDCLOUD_MOBILE_PATTERN = re.compile(r'https?://m\.soundcloud\.com/.+')
+
+# SoundCloud playlist/album patterns (sets, albums, playlists)
+SOUNDCLOUD_PLAYLIST_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/[^/]+/sets/.+')
+SOUNDCLOUD_ALBUM_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/[^/]+/albums/.+')
 
 
 # =============================================================================
@@ -108,6 +126,7 @@ class MusicPlayer:
         self.volume = 0.5
         self.loop = False
         self._ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS) if YTDLP_AVAILABLE else None
+        self._ytdl_playlist = yt_dlp.YoutubeDL(YTDL_PLAYLIST_OPTIONS) if YTDLP_AVAILABLE else None
 
     async def connect(self, channel: discord.VoiceChannel) -> bool:
         """Connect to a voice channel"""
@@ -173,6 +192,54 @@ class MusicPlayer:
         except Exception as e:
             logger.error(f"Failed to add song: {e}")
             return None
+
+    async def add_playlist(self, url: str, requester: discord.Member) -> List[Song]:
+        """Add all songs from a SoundCloud playlist/album to the queue"""
+        if not self._ytdl_playlist:
+            return []
+
+        added_songs = []
+
+        try:
+            # Extract playlist info
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(
+                None,
+                lambda: self._ytdl_playlist.extract_info(url, download=False)
+            )
+
+            if not data:
+                return []
+
+            # Get entries from playlist
+            entries = data.get('entries', [])
+            if not entries:
+                # Maybe it's a single track, try adding it as a song
+                single_song = await self.add_song(url, requester)
+                return [single_song] if single_song else []
+
+            # Add each track to queue
+            for entry in entries:
+                if not entry:
+                    continue
+
+                # Create song from entry data
+                song = Song(
+                    title=entry.get('title', 'Unknown'),
+                    url=entry.get('url') or entry.get('webpage_url', ''),
+                    duration=entry.get('duration') or 0,
+                    thumbnail=entry.get('thumbnail', ''),
+                    requester=requester
+                )
+
+                self.queue.append(song)
+                added_songs.append(song)
+
+            return added_songs
+
+        except Exception as e:
+            logger.error(f"Failed to add playlist: {e}")
+            return []
 
     async def play_next(self):
         """Play the next song in the queue"""
@@ -340,6 +407,88 @@ class Music(commands.Cog):
             embed.add_field(name="Position", value=f"#{len(player.queue)}", inline=True)
             embed.add_field(name="Duration", value=song.duration_str, inline=True)
             await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="playlist", description="Play a SoundCloud playlist or album")
+    @app_commands.describe(url="SoundCloud playlist or album URL")
+    async def playlist(self, interaction: discord.Interaction, url: str):
+        """Add all songs from a SoundCloud playlist/album to the queue"""
+        log_command(str(interaction.user), interaction.user.id, f"playlist {url}", interaction.guild.name)
+
+        # Check dependencies
+        if not YTDLP_AVAILABLE:
+            await interaction.response.send_message(
+                "❌ Music features are not available. yt-dlp is not installed.",
+                ephemeral=True
+            )
+            return
+
+        # Check voice channel
+        voice_channel = await self._check_voice(interaction)
+        if not voice_channel:
+            return
+
+        # Validate URL is a SoundCloud link
+        if not (SOUNDCLOUD_PATTERN.match(url) or SOUNDCLOUD_MOBILE_PATTERN.match(url)):
+            await interaction.response.send_message(
+                "❌ Please provide a valid SoundCloud playlist or album URL!\n"
+                "Example: `https://soundcloud.com/artist/sets/album-name`",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+
+        player = self.get_player(interaction.guild)
+
+        # Connect to voice channel
+        if not await player.connect(voice_channel):
+            await interaction.followup.send("❌ Failed to connect to voice channel!")
+            return
+
+        await interaction.followup.send("📂 Loading playlist/album from SoundCloud...")
+
+        # Add all songs from playlist
+        added_songs = await player.add_playlist(url, interaction.user)
+
+        if not added_songs:
+            await interaction.followup.send("❌ Couldn't load any songs from the playlist!")
+            return
+
+        # Calculate total duration
+        total_duration = sum(song.duration for song in added_songs)
+        duration_str = str(timedelta(seconds=total_duration))
+
+        embed = discord.Embed(
+            title="📂 Playlist Added",
+            description=f"Added **{len(added_songs)}** songs to the queue",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="Total Duration", value=duration_str, inline=True)
+        embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+
+        # Show first few songs
+        if added_songs:
+            preview = "\n".join([f"`{i+1}.` {s.title}" for i, s in enumerate(added_songs[:5])])
+            if len(added_songs) > 5:
+                preview += f"\n*...and {len(added_songs) - 5} more*"
+            embed.add_field(name="Songs", value=preview, inline=False)
+
+        await interaction.followup.send(embed=embed)
+
+        # Start playing if not already
+        if not player.voice_client.is_playing() and not player.voice_client.is_paused():
+            await player.play_next()
+
+            now_playing = discord.Embed(
+                title="🔊 Now Playing",
+                description=f"**{player.current.title}**",
+                color=discord.Color.orange()
+            )
+            if player.current.thumbnail:
+                now_playing.set_thumbnail(url=player.current.thumbnail)
+            now_playing.add_field(name="Duration", value=player.current.duration_str, inline=True)
+            now_playing.add_field(name="Queue", value=f"{len(player.queue)} songs", inline=True)
+            await interaction.followup.send(embed=now_playing)
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):

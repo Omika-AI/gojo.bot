@@ -70,6 +70,13 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
     {
+        "name": "/playlist",
+        "description": "Play a SoundCloud playlist or album",
+        "usage": "/playlist url:<soundcloud playlist/album link>",
+        "category": "music",
+        "permission": None
+    },
+    {
         "name": "/pause",
         "description": "Pause the currently playing song",
         "usage": "/pause",
