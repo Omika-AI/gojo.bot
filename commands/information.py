@@ -221,10 +221,31 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
     {
+        "name": "/karaokelist",
+        "description": "View all available karaoke songs",
+        "usage": "/karaokelist",
+        "category": "karaoke",
+        "permission": None
+    },
+    {
+        "name": "/karaokesolo",
+        "description": "Start a solo karaoke performance with spotlight and countdown",
+        "usage": "/karaokesolo singer:@user",
+        "category": "karaoke",
+        "permission": None
+    },
+    {
+        "name": "/karaokeduet",
+        "description": "Start a duet with two singers taking alternating lines",
+        "usage": "/karaokeduet singer1:@user1 singer2:@user2",
+        "category": "karaoke",
+        "permission": None
+    },
+    {
         "name": "/karaoke",
-        "description": "Start a karaoke session with synced lyrics display",
-        "usage": "/karaoke (then select a song)",
-        "category": "music",
+        "description": "Shows karaoke mode options (redirects to solo/duet)",
+        "usage": "/karaoke",
+        "category": "karaoke",
         "permission": None
     },
 
@@ -388,6 +409,11 @@ CATEGORY_INFO = {
         "emoji": "🔊",
         "description": "Play music from SoundCloud in voice channels"
     },
+    "karaoke": {
+        "name": "Karaoke Commands",
+        "emoji": "🎤",
+        "description": "Sing along with synced lyrics and spotlight features"
+    },
     "moderation": {
         "name": "Moderation Commands",
         "emoji": "🛡️",
@@ -440,7 +466,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "moderation", "admin", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "moderation", "admin", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -566,8 +592,21 @@ class InformationView(View):
                 "• **Playback Controls** - Pause, resume, skip, shuffle\n"
                 "• **Volume Control** - Adjust volume as needed\n"
                 "• **Lyrics** - View song lyrics via Genius integration\n"
-                "• **Karaoke Mode** - Sing along with synced lyrics display!\n"
                 "• **Audio Optimization** - Smooth playback with Opus codec support"
+            ),
+            inline=False
+        )
+
+        # Karaoke Features (Everyone)
+        embed.add_field(
+            name="🎤 Karaoke System",
+            value=(
+                "• **Solo Mode** - Spotlight on a single singer with countdown\n"
+                "• **Duet Mode** - Two singers with alternating lyric lines\n"
+                "• **5-Second Countdown** - Get ready before the music starts\n"
+                "• **Singer Spotlight** - Announces who's singing\n"
+                "• **Synced Lyrics** - Real-time lyrics display while singing\n"
+                "• **Song Library** - Browse available karaoke songs"
             ),
             inline=False
         )
@@ -681,6 +720,7 @@ class InformationView(View):
             "economy": discord.Color.from_rgb(255, 215, 0),  # Gold
             "gambling": discord.Color.purple(),
             "music": discord.Color.green(),
+            "karaoke": discord.Color.magenta(),
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),
             "owner": discord.Color.dark_red()

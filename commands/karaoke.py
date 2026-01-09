@@ -3,8 +3,9 @@ Karaoke Command
 Sing along with lyrics synced to SoundCloud audio playback
 
 Features:
-- Fixed selection of karaoke songs
-- Locally stored timestamped lyrics (LRC format)
+- Solo mode: Spotlight on a single singer
+- Duet mode: Two singers with alternating lyric lines
+- Countdown before performance starts
 - Real-time lyric synchronization
 - Progress bar and visual display
 """
@@ -15,7 +16,7 @@ from discord.ext import commands
 from discord.ui import View, Select, Button
 import asyncio
 import time
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import config
 from utils.logger import log_command, logger
@@ -66,7 +67,9 @@ class KaraokeSession:
         song: KaraokeSong,
         lyrics: list,
         message: discord.Message,
-        text_channel: discord.TextChannel
+        text_channel: discord.TextChannel,
+        mode: str = "solo",
+        singers: List[discord.Member] = None
     ):
         self.guild_id = guild_id
         self.voice_client = voice_client
@@ -77,6 +80,8 @@ class KaraokeSession:
         self.start_time: float = 0
         self.is_playing: bool = False
         self.update_task: Optional[asyncio.Task] = None
+        self.mode = mode  # "solo" or "duet"
+        self.singers = singers or []  # List of singers (1 for solo, 2 for duet)
 
     @property
     def elapsed_time(self) -> float:
@@ -85,14 +90,25 @@ class KaraokeSession:
             return 0
         return time.time() - self.start_time
 
+    def get_current_singer_for_line(self, line_index: int) -> Optional[discord.Member]:
+        """Get which singer should sing the current line (for duet mode)"""
+        if self.mode == "solo" and self.singers:
+            return self.singers[0]
+        elif self.mode == "duet" and len(self.singers) >= 2:
+            # Alternate between singers
+            return self.singers[line_index % 2]
+        return None
+
 
 class SongSelectView(View):
     """View for selecting a karaoke song"""
 
-    def __init__(self, cog: 'Karaoke', user: discord.Member, timeout: float = 120):
+    def __init__(self, cog: 'Karaoke', user: discord.Member, mode: str, singers: List[discord.Member], timeout: float = 120):
         super().__init__(timeout=timeout)
         self.cog = cog
         self.user = user
+        self.mode = mode
+        self.singers = singers
         self.selected_song: Optional[KaraokeSong] = None
 
         # Create song selection dropdown
@@ -154,7 +170,7 @@ class SongSelectView(View):
 
         # Start the karaoke session
         await interaction.response.defer()
-        await self.cog.start_karaoke_session(interaction, self.selected_song)
+        await self.cog.start_karaoke_session(interaction, self.selected_song, self.mode, self.singers)
         self.stop()
 
     async def on_timeout(self):
@@ -203,42 +219,33 @@ class Karaoke(commands.Cog):
         for guild_id in list(self.sessions.keys()):
             asyncio.create_task(self.stop_karaoke_session(guild_id))
 
-    @app_commands.command(name="karaoke", description="Start a karaoke session with synced lyrics!")
-    async def karaoke(self, interaction: discord.Interaction):
-        """Start karaoke mode with song selection"""
-        log_command(str(interaction.user), interaction.user.id, "karaoke", interaction.guild.name)
+    # =============================================================================
+    # SOLO MODE
+    # =============================================================================
 
-        # Check if yt-dlp is available
-        if not YTDLP_AVAILABLE:
-            await interaction.response.send_message(
-                "Karaoke is unavailable - audio system not configured.",
-                ephemeral=True
-            )
+    @app_commands.command(name="karaokesolo", description="Start a solo karaoke performance with spotlight on the singer!")
+    @app_commands.describe(singer="The person who will be singing")
+    async def karaokesolo(self, interaction: discord.Interaction, singer: discord.Member):
+        """Start karaoke in solo mode with a spotlight singer"""
+        log_command(str(interaction.user), interaction.user.id, "karaokesolo", interaction.guild.name)
+
+        # Validation checks
+        if not await self._validate_karaoke_start(interaction, singer):
             return
 
-        # Check if user is in a voice channel
-        if not interaction.user.voice or not interaction.user.voice.channel:
-            await interaction.response.send_message(
-                "You need to be in a voice channel to use karaoke! 🎤",
-                ephemeral=True
-            )
-            return
-
-        # Check if already in a session in this guild
-        if interaction.guild.id in self.sessions:
-            await interaction.response.send_message(
-                "A karaoke session is already active! Use the Stop button to end it first.",
-                ephemeral=True
-            )
-            return
-
-        # Create song selection embed
+        # Create song selection embed with singer announcement
         songs = get_all_songs()
 
         embed = discord.Embed(
-            title="🎤 Karaoke Mode",
-            description="Select a song to sing along with synced lyrics!",
-            color=discord.Color.magenta()
+            title="🎤 SOLO KARAOKE MODE",
+            description=f"**{singer.display_name}** is about to take the stage!",
+            color=discord.Color.gold()
+        )
+
+        embed.add_field(
+            name="🌟 Tonight's Star",
+            value=f"{singer.mention}",
+            inline=True
         )
 
         # List available songs
@@ -252,21 +259,241 @@ class Karaoke(commands.Cog):
             name="How it works",
             value=(
                 "1. Select a song from the dropdown below\n"
-                "2. The bot will join your voice channel\n"
-                "3. Lyrics will appear synced to the music!\n"
-                "4. Sing along and have fun! 🎵"
+                "2. A 5-second countdown will begin\n"
+                "3. The spotlight is on you - SING YOUR HEART OUT! 🎵"
             ),
             inline=False
         )
 
-        embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+        embed.set_footer(text=f"Karaoke started by {interaction.user.display_name}")
 
         # Create view with song selection
-        view = SongSelectView(self, interaction.user)
+        view = SongSelectView(self, interaction.user, "solo", [singer])
 
         await interaction.response.send_message(embed=embed, view=view)
 
-    async def start_karaoke_session(self, interaction: discord.Interaction, song: KaraokeSong):
+    # =============================================================================
+    # DUET MODE
+    # =============================================================================
+
+    @app_commands.command(name="karaokeduet", description="Start a duet karaoke with two singers taking turns!")
+    @app_commands.describe(
+        singer1="First singer (sings odd lines)",
+        singer2="Second singer (sings even lines)"
+    )
+    async def karaokeduet(self, interaction: discord.Interaction, singer1: discord.Member, singer2: discord.Member):
+        """Start karaoke in duet mode with alternating lyrics"""
+        log_command(str(interaction.user), interaction.user.id, "karaokeduet", interaction.guild.name)
+
+        # Check if singers are the same person
+        if singer1.id == singer2.id:
+            await interaction.response.send_message(
+                "A duet needs TWO different people! Pick someone else to sing with.",
+                ephemeral=True
+            )
+            return
+
+        # Validation checks for both singers
+        if not await self._validate_karaoke_start(interaction, singer1, singer2):
+            return
+
+        # Create song selection embed with both singers
+        songs = get_all_songs()
+
+        embed = discord.Embed(
+            title="🎤 DUET KARAOKE MODE",
+            description="Two voices, one song!",
+            color=discord.Color.purple()
+        )
+
+        embed.add_field(
+            name="🎵 Singer 1 (Odd Lines)",
+            value=f"{singer1.mention}",
+            inline=True
+        )
+        embed.add_field(
+            name="🎵 Singer 2 (Even Lines)",
+            value=f"{singer2.mention}",
+            inline=True
+        )
+
+        # List available songs
+        song_list = "\n".join([
+            f"**{i+1}.** {song.title} - *{song.artist}*"
+            for i, song in enumerate(songs)
+        ])
+        embed.add_field(name="Available Songs", value=song_list, inline=False)
+
+        embed.add_field(
+            name="How it works",
+            value=(
+                "1. Select a song from the dropdown below\n"
+                "2. A 5-second countdown will begin\n"
+                "3. Lyrics will alternate between both singers!\n"
+                "4. Watch for YOUR name to know when to sing! 🎵"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text=f"Karaoke started by {interaction.user.display_name}")
+
+        # Create view with song selection
+        view = SongSelectView(self, interaction.user, "duet", [singer1, singer2])
+
+        await interaction.response.send_message(embed=embed, view=view)
+
+    # =============================================================================
+    # LEGACY KARAOKE COMMAND (redirects to solo)
+    # =============================================================================
+
+    @app_commands.command(name="karaoke", description="Start a karaoke session - use /karaokesolo or /karaokeduet instead!")
+    async def karaoke(self, interaction: discord.Interaction):
+        """Legacy karaoke command - redirects users to new commands"""
+        log_command(str(interaction.user), interaction.user.id, "karaoke", interaction.guild.name)
+
+        embed = discord.Embed(
+            title="🎤 Karaoke Has Been Upgraded!",
+            description="Choose your performance mode:",
+            color=discord.Color.magenta()
+        )
+
+        embed.add_field(
+            name="🌟 Solo Mode",
+            value=(
+                "`/karaokesolo @user`\n"
+                "One singer takes the spotlight!\n"
+                "Perfect for showing off your skills."
+            ),
+            inline=True
+        )
+
+        embed.add_field(
+            name="👯 Duet Mode",
+            value=(
+                "`/karaokeduet @user1 @user2`\n"
+                "Two singers, alternating lines!\n"
+                "Great for singing with friends."
+            ),
+            inline=True
+        )
+
+        embed.add_field(
+            name="📋 Song List",
+            value="`/karaokelist`\nSee all available songs!",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+    # =============================================================================
+    # HELPER METHODS
+    # =============================================================================
+
+    async def _validate_karaoke_start(self, interaction: discord.Interaction, *singers: discord.Member) -> bool:
+        """Validate that karaoke can start"""
+        # Check if yt-dlp is available
+        if not YTDLP_AVAILABLE:
+            await interaction.response.send_message(
+                "Karaoke is unavailable - audio system not configured.",
+                ephemeral=True
+            )
+            return False
+
+        # Check if all singers are in a voice channel
+        for singer in singers:
+            if not singer.voice or not singer.voice.channel:
+                await interaction.response.send_message(
+                    f"{singer.display_name} needs to be in a voice channel to sing! 🎤",
+                    ephemeral=True
+                )
+                return False
+
+        # Check if all singers are in the SAME voice channel
+        if len(singers) > 1:
+            channels = set(s.voice.channel.id for s in singers)
+            if len(channels) > 1:
+                await interaction.response.send_message(
+                    "Both singers need to be in the SAME voice channel for a duet!",
+                    ephemeral=True
+                )
+                return False
+
+        # Check if already in a session in this guild
+        if interaction.guild.id in self.sessions:
+            await interaction.response.send_message(
+                "A karaoke session is already active! Use the Stop button to end it first.",
+                ephemeral=True
+            )
+            return False
+
+        return True
+
+    async def _perform_countdown(self, channel: discord.TextChannel, singers: List[discord.Member], mode: str) -> discord.Message:
+        """
+        Perform a 5-second countdown before the song starts
+        Returns the countdown message for later editing
+        """
+        # Build singer announcement
+        if mode == "solo":
+            singer_text = f"🌟 **{singers[0].display_name}** 🌟"
+        else:
+            singer_text = f"🎵 **{singers[0].display_name}** & **{singers[1].display_name}** 🎵"
+
+        # Initial countdown embed
+        embed = discord.Embed(
+            title="🎤 GET READY!",
+            description=f"Now performing: {singer_text}",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="Starting in...",
+            value="```\n   🔴 5 🔴\n```",
+            inline=False
+        )
+        embed.set_footer(text="Get ready to sing!")
+
+        countdown_msg = await channel.send(embed=embed)
+
+        # Countdown loop: 5, 4, 3, 2, 1
+        countdown_emojis = {
+            5: "🔴",
+            4: "🟠",
+            3: "🟡",
+            2: "🟢",
+            1: "💚"
+        }
+
+        for i in range(4, 0, -1):
+            await asyncio.sleep(1)
+            emoji = countdown_emojis.get(i, "⭐")
+            embed.set_field_at(
+                0,
+                name="Starting in...",
+                value=f"```\n   {emoji} {i} {emoji}\n```",
+                inline=False
+            )
+            await countdown_msg.edit(embed=embed)
+
+        # Final "GO!" message
+        await asyncio.sleep(1)
+        embed = discord.Embed(
+            title="🎤 LET'S GO!",
+            description=f"🎵 **SING!** 🎵\n\n{singer_text}",
+            color=discord.Color.green()
+        )
+        await countdown_msg.edit(embed=embed)
+
+        # Brief pause then return
+        await asyncio.sleep(0.5)
+        return countdown_msg
+
+    async def start_karaoke_session(
+        self,
+        interaction: discord.Interaction,
+        song: KaraokeSong,
+        mode: str,
+        singers: List[discord.Member]
+    ):
         """Start a karaoke session for the selected song"""
         guild = interaction.guild
         user = interaction.user
@@ -277,13 +504,13 @@ class Karaoke(commands.Cog):
         if not lyrics:
             await interaction.followup.send(
                 f"Could not load lyrics for **{song.display_name}**.\n"
-                f"Please check that `data/karaoke/{song.lyrics_file}` exists and is properly formatted.",
+                f"Please check that `lyrics/{song.lyrics_file}` exists and is properly formatted.",
                 ephemeral=True
             )
             return
 
-        # Join voice channel
-        voice_channel = user.voice.channel
+        # Join voice channel (use first singer's channel)
+        voice_channel = singers[0].voice.channel
         try:
             if guild.voice_client:
                 await guild.voice_client.move_to(voice_channel)
@@ -324,10 +551,28 @@ class Karaoke(commands.Cog):
             )
             return
 
+        # Send "preparing" message
+        preparing_embed = discord.Embed(
+            title="🎤 Preparing Stage...",
+            description="Setting up your karaoke session!",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=preparing_embed)
+
+        # Perform the countdown!
+        await self._perform_countdown(interaction.channel, singers, mode)
+
         # Create initial lyrics embed
+        if mode == "solo":
+            title = f"🎤 Now Singing: {singers[0].display_name}"
+            description = f"**{song.title}** by *{song.artist}*"
+        else:
+            title = f"🎤 Duet: {singers[0].display_name} & {singers[1].display_name}"
+            description = f"**{song.title}** by *{song.artist}*"
+
         embed = discord.Embed(
-            title=f"🎤 Now Playing: {song.title}",
-            description=f"**{song.artist}**",
+            title=title,
+            description=description,
             color=discord.Color.magenta()
         )
         embed.add_field(
@@ -339,7 +584,7 @@ class Karaoke(commands.Cog):
 
         # Send lyrics message
         view = KaraokeControlView(self, guild.id)
-        lyrics_message = await interaction.followup.send(embed=embed, view=view)
+        lyrics_message = await interaction.channel.send(embed=embed, view=view)
 
         # Create session
         session = KaraokeSession(
@@ -348,7 +593,9 @@ class Karaoke(commands.Cog):
             song=song,
             lyrics=lyrics,
             message=lyrics_message,
-            text_channel=interaction.channel
+            text_channel=interaction.channel,
+            mode=mode,
+            singers=singers
         )
         self.sessions[guild.id] = session
 
@@ -374,7 +621,7 @@ class Karaoke(commands.Cog):
                 self._update_lyrics_loop(session)
             )
 
-            logger.info(f"Karaoke session started: {song.display_name} in {guild.name}")
+            logger.info(f"Karaoke session started: {song.display_name} in {guild.name} ({mode} mode)")
 
         except Exception as e:
             logger.error(f"Failed to start karaoke playback: {e}")
@@ -400,16 +647,29 @@ class Karaoke(commands.Cog):
                 if current_idx != last_line_idx:
                     last_line_idx = current_idx
 
-                    # Build updated embed
-                    lyrics_display = format_lyrics_progress(
-                        session.lyrics,
-                        current_time,
-                        session.song.duration
-                    )
+                    # Build updated embed based on mode
+                    if session.mode == "duet":
+                        lyrics_display = self._format_duet_lyrics(session, current_time, current_idx)
+                    else:
+                        lyrics_display = format_lyrics_progress(
+                            session.lyrics,
+                            current_time,
+                            session.song.duration
+                        )
+
+                    if session.mode == "solo":
+                        title = f"🎤 Now Singing: {session.singers[0].display_name}"
+                    else:
+                        # Highlight current singer
+                        current_singer = session.get_current_singer_for_line(current_idx)
+                        if current_singer:
+                            title = f"🎤 {current_singer.display_name}'s Turn!"
+                        else:
+                            title = f"🎤 Duet: {session.singers[0].display_name} & {session.singers[1].display_name}"
 
                     embed = discord.Embed(
-                        title=f"🎤 Now Playing: {session.song.title}",
-                        description=f"**{session.song.artist}**",
+                        title=title,
+                        description=f"**{session.song.title}** by *{session.song.artist}*",
                         color=discord.Color.magenta()
                     )
                     embed.add_field(
@@ -435,6 +695,55 @@ class Karaoke(commands.Cog):
         except Exception as e:
             logger.error(f"Karaoke lyrics update error: {e}")
 
+    def _format_duet_lyrics(self, session: KaraokeSession, current_time: float, current_idx: int) -> str:
+        """Format lyrics for duet mode with singer indicators"""
+        lyrics = session.lyrics
+        duration = session.song.duration
+
+        if not lyrics:
+            return "*No lyrics loaded - check LRC file*"
+
+        # Progress bar
+        progress = min(1.0, current_time / duration) if duration > 0 else 0
+        bar_length = 20
+        filled = int(bar_length * progress)
+        bar = "=" * filled + "-" * (bar_length - filled)
+
+        # Time display
+        current_mins = int(current_time // 60)
+        current_secs = int(current_time % 60)
+        total_mins = int(duration // 60)
+        total_secs = int(duration % 60)
+        time_str = f"{current_mins}:{current_secs:02d} / {total_mins}:{total_secs:02d}"
+
+        # Build lyrics display with singer indicators
+        lines = []
+        context_lines = 2
+
+        # Previous lines (dimmed)
+        start_idx = max(0, current_idx - context_lines)
+        for i in range(start_idx, current_idx):
+            singer = session.get_current_singer_for_line(i)
+            singer_tag = f"[{singer.display_name[:10]}]" if singer else ""
+            lines.append(f"*{singer_tag} {lyrics[i].text}*")  # Italic for past lines
+
+        # Current line (bold with singer highlighted)
+        if current_idx < len(lyrics):
+            singer = session.get_current_singer_for_line(current_idx)
+            singer_tag = f"🎤 {singer.display_name}" if singer else "🎤"
+            lines.append(f"**>> [{singer_tag}] {lyrics[current_idx].text} <<**")
+
+        # Upcoming lines
+        end_idx = min(len(lyrics), current_idx + context_lines + 1)
+        for i in range(current_idx + 1, end_idx):
+            singer = session.get_current_singer_for_line(i)
+            singer_tag = f"[{singer.display_name[:10]}]" if singer else ""
+            lines.append(f"{singer_tag} {lyrics[i].text}")
+
+        lyrics_display = "\n".join(lines) if lines else "*Instrumental*"
+
+        return f"```\n[{bar}] {time_str}\n```\n\n{lyrics_display}"
+
     async def stop_karaoke_session(self, guild_id: int):
         """Stop a karaoke session"""
         session = self.sessions.get(guild_id)
@@ -459,12 +768,17 @@ class Karaoke(commands.Cog):
 
         # Update final message
         try:
+            if session.mode == "solo":
+                thanks_to = session.singers[0].display_name
+            else:
+                thanks_to = f"{session.singers[0].display_name} & {session.singers[1].display_name}"
+
             embed = discord.Embed(
                 title="🎤 Karaoke Session Ended",
-                description=f"Thanks for singing **{session.song.title}**!",
+                description=f"Amazing performance by **{thanks_to}**!\nThanks for singing **{session.song.title}**! 👏",
                 color=discord.Color.grey()
             )
-            embed.set_footer(text="Use /karaoke to start again!")
+            embed.set_footer(text="Use /karaokesolo or /karaokeduet to start again!")
             await session.message.edit(embed=embed, view=None)
         except:
             pass

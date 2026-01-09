@@ -92,10 +92,18 @@ class Help(commands.Cog):
         )
 
         # Music Commands (Everyone)
-        music_cmds = "`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle` `/audiostatus` `/karaoke`"
+        music_cmds = "`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle` `/audiostatus`"
         embed.add_field(
             name="🔊 Music",
             value=music_cmds,
+            inline=False
+        )
+
+        # Karaoke Commands (Everyone)
+        karaoke_cmds = "`/karaokelist` `/karaokesolo` `/karaokeduet` `/karaoke`"
+        embed.add_field(
+            name="🎤 Karaoke",
+            value=karaoke_cmds,
             inline=False
         )
 
