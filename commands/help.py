@@ -107,6 +107,14 @@ class Help(commands.Cog):
             inline=False
         )
 
+        # Achievement Commands (Everyone)
+        achievement_cmds = "`/achievements` `/achievementstats`"
+        embed.add_field(
+            name="🏆 Achievements",
+            value=achievement_cmds,
+            inline=False
+        )
+
         # Moderation Commands (Mods only)
         if is_mod or is_admin:
             mod_cmds = "`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`"

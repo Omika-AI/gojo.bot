@@ -459,7 +459,7 @@ class Karaoke(commands.Cog):
         )
         embed.add_field(
             name="Starting in...",
-            value="```\n   🔴 5 🔴\n```",
+            value="```\n   🟡 3 🟡\n```",
             inline=False
         )
 
@@ -476,16 +476,14 @@ class Karaoke(commands.Cog):
 
         countdown_msg = await channel.send(embed=embed)
 
-        # Countdown loop: 5, 4, 3, 2, 1
+        # Countdown loop: 3, 2, 1
         countdown_emojis = {
-            5: "🔴",
-            4: "🟠",
             3: "🟡",
             2: "🟢",
             1: "💚"
         }
 
-        for i in range(4, 0, -1):
+        for i in range(2, 0, -1):
             await asyncio.sleep(1)
             emoji = countdown_emojis.get(i, "⭐")
             embed.set_field_at(
