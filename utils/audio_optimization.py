@@ -128,10 +128,12 @@ OPTIMIZED_YTDL_OPTIONS = {
 
 # FFmpeg options explanation:
 # -vn: Disable video processing (we only want audio)
-# -ar 48000: Output at 48kHz (Discord's native sample rate, avoids resampling)
+# -ar 48000: Output at 48kHz (Discord's native sample rate)
 # -ac 2: Stereo output (Discord standard)
-# -acodec pcm_s16le: Output raw PCM for discord.py (it handles Opus encoding)
-# -af aresample=async=1: Smooth async resampling to handle timing variations
+# -f s16le: Output format - 16-bit signed little-endian PCM (discord.py native)
+#
+# NOTE: We do NOT use aresample=async=1 because it can cause audio speedup/slowdown
+# by compensating for timestamp variations. For music playback, we want exact speed.
 
 OPTIMIZED_FFMPEG_OPTIONS = {
     'before_options': (
@@ -147,8 +149,7 @@ OPTIMIZED_FFMPEG_OPTIONS = {
         '-vn '
         '-ar 48000 '
         '-ac 2 '
-        '-acodec pcm_s16le '
-        '-af aresample=async=1:min_hard_comp=0.100000:first_pts=0'
+        '-f s16le'
     )
 }
 
@@ -180,9 +181,11 @@ ULTRA_YTDL_OPTIONS = {
 
 # Ultra FFmpeg settings explanation:
 # -thread_queue_size 4096: Larger buffer for input thread (prevents underruns)
-# -filter_threads 2: Use multiple threads for filtering (smoother processing)
 # Larger analyzeduration/probesize: Better format detection at cost of startup time
-# aresample with higher quality settings for smoother audio
+# -fflags +genpts: Generate presentation timestamps for smooth playback
+#
+# NOTE: We do NOT use aresample=async=1 because it causes audio speed changes.
+# Instead, we use high-quality resampling without async compensation.
 
 ULTRA_FFMPEG_OPTIONS = {
     'before_options': (
@@ -200,9 +203,8 @@ ULTRA_FFMPEG_OPTIONS = {
         '-vn '
         '-ar 48000 '
         '-ac 2 '
-        '-acodec pcm_s16le '
-        '-filter_threads 2 '
-        '-af aresample=async=1:min_hard_comp=0.100000:first_pts=0:dither_method=triangular_hp'
+        '-f s16le '
+        '-af aresample=resampler=soxr:precision=28:dither_method=triangular_hp'
     )
 }
 
