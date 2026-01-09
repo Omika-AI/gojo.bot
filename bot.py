@@ -103,7 +103,7 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
         # User joined a voice channel
         if before.channel is None and after.channel is not None:
             voice_join_times[member.id] = time.time()
-            logger.debug(f"{member.name} joined voice channel {after.channel.name}")
+            logger.info(f"[VC JOIN] {member.name} ({member.id}) joined #{after.channel.name} in {member.guild.name}")
 
         # User left a voice channel
         elif before.channel is not None and after.channel is None:
@@ -111,14 +111,22 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                 join_time = voice_join_times.pop(member.id)
                 time_spent = int(time.time() - join_time)
                 if time_spent > 0:
+                    # Format time for logging
+                    hours = time_spent // 3600
+                    minutes = (time_spent % 3600) // 60
+                    seconds = time_spent % 60
+                    time_str = f"{hours}h {minutes}m {seconds}s" if hours > 0 else f"{minutes}m {seconds}s"
+
                     update_user_stat(member.id, "voice_time", increment=time_spent)
                     check_and_complete_achievements(member.id)
-                    logger.debug(f"{member.name} spent {time_spent}s in voice")
+                    logger.info(f"[VC LEAVE] {member.name} ({member.id}) left #{before.channel.name} after {time_str}")
+            else:
+                # User was in VC before bot started tracking
+                logger.info(f"[VC LEAVE] {member.name} ({member.id}) left #{before.channel.name} (time not tracked - joined before bot)")
 
         # User switched channels (still in voice, just moved)
         elif before.channel is not None and after.channel is not None and before.channel != after.channel:
-            # Keep tracking, they're still in voice
-            pass
+            logger.info(f"[VC SWITCH] {member.name} ({member.id}) moved from #{before.channel.name} to #{after.channel.name}")
 
     except Exception as e:
         logger.error(f"Error tracking voice time: {e}")

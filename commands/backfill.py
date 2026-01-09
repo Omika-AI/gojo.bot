@@ -1,7 +1,8 @@
 """
 Backfill Command
-Scan historical messages to update achievement stats (messages_sent)
+Scan historical messages and sync economy data to achievement stats
 This allows the bot to count messages sent before it started tracking
+and sync gambling/economy stats to achievements
 
 Admin-only command due to the API-intensive nature of scanning history
 """
@@ -11,7 +12,9 @@ from discord import app_commands
 from discord.ext import commands
 from typing import Optional
 import asyncio
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from utils.logger import log_command, logger
 from utils.achievements_data import (
@@ -20,6 +23,20 @@ from utils.achievements_data import (
     update_user_stat,
     check_and_complete_achievements
 )
+
+# Path to economy data
+ECONOMY_FILE = Path(__file__).parent.parent / "data" / "economy.json"
+
+
+def load_economy_data() -> dict:
+    """Load economy data from file"""
+    if ECONOMY_FILE.exists():
+        try:
+            with open(ECONOMY_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading economy data: {e}")
+    return {"guilds": {}}
 
 
 class Backfill(commands.Cog):
@@ -31,20 +48,22 @@ class Backfill(commands.Cog):
 
     @app_commands.command(
         name="backfill",
-        description="[Admin] Scan message history to update achievement message counts"
+        description="[Admin] Sync all historical data: messages, gambling, balance, streaks"
     )
     @app_commands.describe(
         limit_per_channel="Max messages to scan per channel (default: 10000, max: 100000)",
-        days_back="Only scan messages from the last X days (optional, scans all if not set)"
+        days_back="Only scan messages from the last X days (optional, scans all if not set)",
+        skip_messages="Skip message scanning and only sync economy data (faster)"
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def backfill(
         self,
         interaction: discord.Interaction,
         limit_per_channel: Optional[int] = 10000,
-        days_back: Optional[int] = None
+        days_back: Optional[int] = None,
+        skip_messages: Optional[bool] = False
     ):
-        """Scan message history and update message counts for all users"""
+        """Scan message history and sync economy data to achievement stats"""
         try:
             guild_name = interaction.guild.name if interaction.guild else "DM"
             log_command(str(interaction.user), interaction.user.id, "backfill", guild_name)
@@ -81,107 +100,169 @@ class Backfill(commands.Cog):
 
             self.is_scanning = True
 
-            # Get all text channels the bot can see
-            text_channels = [
-                ch for ch in interaction.guild.channels
-                if isinstance(ch, discord.TextChannel)
-                and ch.permissions_for(interaction.guild.me).read_message_history
-            ]
-
-            if not text_channels:
-                await interaction.followup.send(
-                    "I don't have permission to read message history in any channels!",
-                    ephemeral=True
-                )
-                self.is_scanning = False
-                return
-
-            # Create initial progress embed
-            embed = discord.Embed(
-                title="📊 Backfill in Progress",
-                description="Scanning message history to update achievement stats...",
-                color=discord.Color.blue()
-            )
-            embed.add_field(
-                name="Status",
-                value=f"Starting scan of {len(text_channels)} channels...",
-                inline=False
-            )
-            if days_back:
-                embed.add_field(
-                    name="Date Range",
-                    value=f"Last {days_back} days",
-                    inline=True
-                )
-            embed.add_field(
-                name="Limit per Channel",
-                value=f"{limit_per_channel:,} messages",
-                inline=True
-            )
-
-            progress_msg = await interaction.followup.send(embed=embed)
-
-            # Track message counts per user
+            # Track results
             user_message_counts = {}
             total_messages = 0
             channels_scanned = 0
             errors = []
+            updated_users = 0
+            achievements_unlocked = 0
+            economy_synced = 0
 
-            # Scan each channel
-            for channel in text_channels:
-                try:
-                    channel_messages = 0
+            # =====================================================
+            # PART 1: MESSAGE SCANNING (unless skipped)
+            # =====================================================
+            if not skip_messages:
+                # Get all text channels the bot can see
+                text_channels = [
+                    ch for ch in interaction.guild.channels
+                    if isinstance(ch, discord.TextChannel)
+                    and ch.permissions_for(interaction.guild.me).read_message_history
+                ]
 
-                    # Fetch message history with rate limiting built-in
-                    async for message in channel.history(
-                        limit=limit_per_channel,
-                        after=after_date,
-                        oldest_first=False
-                    ):
-                        # Skip bot messages
-                        if message.author.bot:
-                            continue
+                if not text_channels:
+                    errors.append("No channels accessible for message scanning")
+                else:
+                    # Create initial progress embed
+                    embed = discord.Embed(
+                        title="📊 Backfill in Progress",
+                        description="Scanning message history and syncing economy data...",
+                        color=discord.Color.blue()
+                    )
+                    embed.add_field(
+                        name="Status",
+                        value=f"Starting scan of {len(text_channels)} channels...",
+                        inline=False
+                    )
+                    if days_back:
+                        embed.add_field(
+                            name="Date Range",
+                            value=f"Last {days_back} days",
+                            inline=True
+                        )
+                    embed.add_field(
+                        name="Limit per Channel",
+                        value=f"{limit_per_channel:,} messages",
+                        inline=True
+                    )
 
-                        user_id = str(message.author.id)
-                        user_message_counts[user_id] = user_message_counts.get(user_id, 0) + 1
-                        total_messages += 1
-                        channel_messages += 1
+                    progress_msg = await interaction.followup.send(embed=embed)
 
-                        # Update progress every 500 messages to avoid rate limits on edits
-                        if total_messages % 500 == 0:
-                            embed.set_field_at(
-                                0,
-                                name="Status",
-                                value=(
-                                    f"Scanning: **#{channel.name}**\n"
-                                    f"Channels: {channels_scanned + 1}/{len(text_channels)}\n"
-                                    f"Messages found: {total_messages:,}\n"
-                                    f"Users found: {len(user_message_counts)}"
-                                ),
-                                inline=False
-                            )
-                            try:
-                                await progress_msg.edit(embed=embed)
-                            except:
-                                pass  # Ignore edit failures
+                    # Scan each channel
+                    for channel in text_channels:
+                        try:
+                            channel_messages = 0
 
-                            # Small delay to be nice to the API
-                            await asyncio.sleep(0.1)
+                            # Fetch message history with rate limiting built-in
+                            async for message in channel.history(
+                                limit=limit_per_channel,
+                                after=after_date,
+                                oldest_first=False
+                            ):
+                                # Skip bot messages
+                                if message.author.bot:
+                                    continue
 
-                    channels_scanned += 1
-                    logger.info(f"Backfill: Scanned #{channel.name} - {channel_messages} messages")
+                                user_id = str(message.author.id)
+                                user_message_counts[user_id] = user_message_counts.get(user_id, 0) + 1
+                                total_messages += 1
+                                channel_messages += 1
 
-                except discord.Forbidden:
-                    errors.append(f"No access to #{channel.name}")
-                except Exception as e:
-                    errors.append(f"Error in #{channel.name}: {str(e)[:50]}")
-                    logger.error(f"Backfill error in {channel.name}: {e}")
+                                # Update progress every 500 messages
+                                if total_messages % 500 == 0:
+                                    embed.set_field_at(
+                                        0,
+                                        name="Status",
+                                        value=(
+                                            f"Scanning: **#{channel.name}**\n"
+                                            f"Channels: {channels_scanned + 1}/{len(text_channels)}\n"
+                                            f"Messages found: {total_messages:,}\n"
+                                            f"Users found: {len(user_message_counts)}"
+                                        ),
+                                        inline=False
+                                    )
+                                    try:
+                                        await progress_msg.edit(embed=embed)
+                                    except:
+                                        pass
 
-            # Now update user stats
+                                    await asyncio.sleep(0.1)
+
+                            channels_scanned += 1
+                            logger.info(f"Backfill: Scanned #{channel.name} - {channel_messages} messages")
+
+                        except discord.Forbidden:
+                            errors.append(f"No access to #{channel.name}")
+                        except Exception as e:
+                            errors.append(f"Error in #{channel.name}: {str(e)[:50]}")
+                            logger.error(f"Backfill error in {channel.name}: {e}")
+
+                    # Update progress
+                    embed.set_field_at(
+                        0,
+                        name="Status",
+                        value=f"Updating {len(user_message_counts)} user message records...",
+                        inline=False
+                    )
+                    try:
+                        await progress_msg.edit(embed=embed)
+                    except:
+                        pass
+            else:
+                # Skip messages mode - just show economy sync
+                embed = discord.Embed(
+                    title="📊 Backfill in Progress",
+                    description="Syncing economy data to achievements (message scan skipped)...",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(
+                    name="Status",
+                    value="Syncing economy data...",
+                    inline=False
+                )
+                progress_msg = await interaction.followup.send(embed=embed)
+
+            # =====================================================
+            # PART 2: UPDATE MESSAGE COUNTS (if scanned)
+            # =====================================================
+            if user_message_counts:
+                for user_id, message_count in user_message_counts.items():
+                    try:
+                        data = load_user_progress()
+
+                        if user_id not in data:
+                            data[user_id] = {
+                                "messages_sent": 0,
+                                "songs_played": 0,
+                                "karaoke_sessions": 0,
+                                "karaoke_duets": 0,
+                                "gambling_winnings": 0,
+                                "max_win_streak": 0,
+                                "current_win_streak": 0,
+                                "max_daily_streak": 0,
+                                "voice_time": 0,
+                                "commands_used": 0,
+                                "peak_balance": 0,
+                                "completed_achievements": []
+                            }
+
+                        current = data[user_id].get("messages_sent", 0)
+                        if message_count > current:
+                            data[user_id]["messages_sent"] = message_count
+                            updated_users += 1
+
+                        save_user_progress(data)
+
+                    except Exception as e:
+                        logger.error(f"Error updating user {user_id} messages: {e}")
+
+            # =====================================================
+            # PART 3: SYNC ECONOMY DATA
+            # =====================================================
             embed.set_field_at(
                 0,
                 name="Status",
-                value=f"Updating {len(user_message_counts)} user records...",
+                value="Syncing economy data (gambling, balance, streaks)...",
                 inline=False
             )
             try:
@@ -189,70 +270,130 @@ class Backfill(commands.Cog):
             except:
                 pass
 
-            # Load current progress and update
-            updated_users = 0
-            achievements_unlocked = 0
+            # Load economy data
+            economy_data = load_economy_data()
+            guild_id = str(interaction.guild.id)
+            guild_economy = economy_data.get("guilds", {}).get(guild_id, {}).get("users", {})
 
-            for user_id, message_count in user_message_counts.items():
+            if guild_economy:
+                achievement_data = load_user_progress()
+
+                for user_id, eco_stats in guild_economy.items():
+                    try:
+                        # Initialize user if not exists
+                        if user_id not in achievement_data:
+                            achievement_data[user_id] = {
+                                "messages_sent": 0,
+                                "songs_played": 0,
+                                "karaoke_sessions": 0,
+                                "karaoke_duets": 0,
+                                "gambling_winnings": 0,
+                                "max_win_streak": 0,
+                                "current_win_streak": 0,
+                                "max_daily_streak": 0,
+                                "voice_time": 0,
+                                "commands_used": 0,
+                                "peak_balance": 0,
+                                "completed_achievements": []
+                            }
+
+                        user_data = achievement_data[user_id]
+                        synced = False
+
+                        # Sync gambling winnings
+                        total_won = eco_stats.get("total_won", 0)
+                        if total_won > user_data.get("gambling_winnings", 0):
+                            user_data["gambling_winnings"] = total_won
+                            synced = True
+
+                        # Sync peak balance
+                        current_balance = eco_stats.get("balance", 0)
+                        total_earned = eco_stats.get("total_earned", 0)
+                        peak = max(current_balance, total_earned, user_data.get("peak_balance", 0))
+                        if peak > user_data.get("peak_balance", 0):
+                            user_data["peak_balance"] = peak
+                            synced = True
+
+                        # Sync daily streak
+                        daily_streak = eco_stats.get("daily_streak", 0)
+                        if daily_streak > user_data.get("max_daily_streak", 0):
+                            user_data["max_daily_streak"] = daily_streak
+                            synced = True
+
+                        if synced:
+                            economy_synced += 1
+
+                    except Exception as e:
+                        logger.error(f"Error syncing economy for user {user_id}: {e}")
+
+                save_user_progress(achievement_data)
+
+            # =====================================================
+            # PART 4: CHECK ACHIEVEMENTS FOR ALL USERS
+            # =====================================================
+            embed.set_field_at(
+                0,
+                name="Status",
+                value="Checking for newly unlocked achievements...",
+                inline=False
+            )
+            try:
+                await progress_msg.edit(embed=embed)
+            except:
+                pass
+
+            # Get all users to check
+            all_users = set(user_message_counts.keys()) | set(guild_economy.keys())
+            for user_id in all_users:
                 try:
-                    # Update the messages_sent stat (add to existing)
-                    # We use the backfill count directly since this is a one-time sync
-                    data = load_user_progress()
-
-                    if user_id not in data:
-                        data[user_id] = {
-                            "messages_sent": 0,
-                            "songs_played": 0,
-                            "karaoke_sessions": 0,
-                            "karaoke_duets": 0,
-                            "gambling_winnings": 0,
-                            "max_win_streak": 0,
-                            "current_win_streak": 0,
-                            "max_daily_streak": 0,
-                            "voice_time": 0,
-                            "commands_used": 0,
-                            "peak_balance": 0,
-                            "completed_achievements": []
-                        }
-
-                    # Set the messages_sent to the backfill count
-                    # (only if it's higher than current, to avoid losing progress)
-                    current = data[user_id].get("messages_sent", 0)
-                    if message_count > current:
-                        data[user_id]["messages_sent"] = message_count
-                        updated_users += 1
-
-                    save_user_progress(data)
-
-                    # Check for newly unlocked achievements
                     newly_completed = check_and_complete_achievements(int(user_id))
                     achievements_unlocked += len(newly_completed)
-
                 except Exception as e:
-                    logger.error(f"Error updating user {user_id}: {e}")
+                    logger.error(f"Error checking achievements for {user_id}: {e}")
 
-            # Final status
+            # =====================================================
+            # FINAL RESULTS
+            # =====================================================
             self.is_scanning = False
 
             embed = discord.Embed(
                 title="✅ Backfill Complete!",
-                description="Message history has been scanned and stats updated.",
+                description="All historical data has been synced to achievements.",
                 color=discord.Color.green()
             )
+
+            # Build results summary
+            results = []
+            if not skip_messages:
+                results.append(f"**Channels scanned:** {channels_scanned}")
+                results.append(f"**Messages counted:** {total_messages:,}")
+                results.append(f"**Message stats updated:** {updated_users} users")
+            else:
+                results.append("**Messages:** Skipped (use without skip_messages to scan)")
+
+            results.append(f"**Economy synced:** {economy_synced} users")
+            results.append(f"**Achievements unlocked:** {achievements_unlocked}")
+
             embed.add_field(
                 name="📊 Results",
+                value="\n".join(results),
+                inline=False
+            )
+
+            # Show what was synced
+            embed.add_field(
+                name="📋 Data Synced",
                 value=(
-                    f"**Channels scanned:** {channels_scanned}/{len(text_channels)}\n"
-                    f"**Messages counted:** {total_messages:,}\n"
-                    f"**Users found:** {len(user_message_counts)}\n"
-                    f"**Users updated:** {updated_users}\n"
-                    f"**Achievements unlocked:** {achievements_unlocked}"
+                    "• Message counts (Chat God achievement)\n"
+                    "• Gambling winnings (High Roller achievement)\n"
+                    "• Peak balance (Wealthy Elite achievement)\n"
+                    "• Daily streak (Daily Devotee achievement)"
                 ),
                 inline=False
             )
 
             if errors:
-                error_text = "\n".join(errors[:5])  # Show max 5 errors
+                error_text = "\n".join(errors[:5])
                 if len(errors) > 5:
                     error_text += f"\n...and {len(errors) - 5} more"
                 embed.add_field(
@@ -261,13 +402,13 @@ class Backfill(commands.Cog):
                     inline=False
                 )
 
-            embed.set_footer(text="Users can now use /achievementstats to see updated progress!")
+            embed.set_footer(text="Use /achievementstats to see updated progress!")
 
             await progress_msg.edit(embed=embed)
 
             logger.info(
-                f"Backfill complete: {total_messages} messages, "
-                f"{len(user_message_counts)} users, {achievements_unlocked} achievements"
+                f"Backfill complete: {total_messages} messages, {economy_synced} economy synced, "
+                f"{achievements_unlocked} achievements"
             )
 
         except Exception as e:
