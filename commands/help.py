@@ -126,7 +126,7 @@ class Help(commands.Cog):
 
         # Admin Commands (Admins only)
         if is_admin:
-            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/ultraoptimizemusic`"
+            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/ultraoptimizemusic` `/backfill` `/syncstats`"
             embed.add_field(
                 name="👑 Admin",
                 value=admin_cmds,

@@ -249,6 +249,22 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Achievement Commands (Everyone can use)
+    {
+        "name": "/achievements",
+        "description": "View your unlocked achievements and progress",
+        "usage": "/achievements or /achievements @user",
+        "category": "achievements",
+        "permission": None
+    },
+    {
+        "name": "/achievementstats",
+        "description": "View detailed progress toward all achievements with progress bars",
+        "usage": "/achievementstats or /achievementstats user:@someone",
+        "category": "achievements",
+        "permission": None
+    },
+
     # Moderation Commands (Require specific permissions)
     {
         "name": "/moderationpanel",
@@ -343,6 +359,20 @@ COMMANDS_REGISTRY = [
         "category": "admin",
         "permission": "administrator"
     },
+    {
+        "name": "/backfill",
+        "description": "Sync all historical data: messages, gambling wins, balance, and daily streaks to achievements",
+        "usage": "/backfill or /backfill skip_messages:True (economy only)",
+        "category": "admin",
+        "permission": "administrator"
+    },
+    {
+        "name": "/syncstats",
+        "description": "Sync economy data (gambling, balance, streaks) to achievement stats",
+        "usage": "/syncstats or /syncstats user:@someone",
+        "category": "admin",
+        "permission": "administrator"
+    },
 
     # Owner Commands (Server Owner only)
     {
@@ -414,6 +444,11 @@ CATEGORY_INFO = {
         "emoji": "🎤",
         "description": "Sing along with synced lyrics and spotlight features"
     },
+    "achievements": {
+        "name": "Achievement Commands",
+        "emoji": "🏆",
+        "description": "Track progress and unlock achievements"
+    },
     "moderation": {
         "name": "Moderation Commands",
         "emoji": "🛡️",
@@ -466,7 +501,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "moderation", "admin", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "moderation", "admin", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -637,6 +672,21 @@ class InformationView(View):
             inline=False
         )
 
+        # Achievement Features (Everyone)
+        embed.add_field(
+            name="🏆 Achievement System",
+            value=(
+                "• **10 Unique Achievements** - Unlock achievements as you use the bot\n"
+                "• **Progress Tracking** - View your progress toward each achievement\n"
+                "• **Chat God** - Send 10,000 messages\n"
+                "• **Voice Veteran** - Spend 50 hours in voice channels\n"
+                "• **High Roller** - Win 50,000 coins from gambling\n"
+                "• **Wealthy Elite** - Have 100,000 coins at once\n"
+                "• **And More!** - Music, karaoke, daily streaks achievements"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
@@ -721,6 +771,7 @@ class InformationView(View):
             "gambling": discord.Color.purple(),
             "music": discord.Color.green(),
             "karaoke": discord.Color.magenta(),
+            "achievements": discord.Color.from_rgb(255, 165, 0),  # Orange/Gold
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),
             "owner": discord.Color.dark_red()
