@@ -30,6 +30,12 @@ from datetime import timedelta
 
 import config
 from utils.logger import log_command, logger
+from utils.audio_optimization import (
+    get_ytdl_options,
+    get_ytdl_playlist_options,
+    get_ffmpeg_options,
+    get_optimization_status
+)
 
 # Try to import yt-dlp for audio streaming
 try:
@@ -44,38 +50,29 @@ except ImportError:
 # CONFIGURATION
 # =============================================================================
 
-# yt-dlp options for audio extraction (single tracks)
-YTDL_OPTIONS = {
-    'format': 'bestaudio/best',
-    'noplaylist': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'scsearch',  # SoundCloud search
-    'source_address': '0.0.0.0',
-    'extract_flat': False,
-}
+# Audio optimization is now handled by utils/audio_optimization.py
+# The functions get_ytdl_options(), get_ytdl_playlist_options(), and
+# get_ffmpeg_options() provide optimized settings with:
+# - Opus/AAC codec preference (Discord native, minimal re-encoding)
+# - Async resampling for smooth playback
+# - Enhanced buffering to prevent micro-stutters
+# - 48kHz/Stereo output (Discord native sample rate)
+#
+# To disable optimizations, set AUDIO_OPTIMIZATION_ENABLED = False in
+# utils/audio_optimization.py
+#
+# Admin command /ultraoptimizemusic enables maximum quality settings per-server
+
+# yt-dlp options - now using optimized defaults from audio_optimization module
+# These are fetched dynamically to support per-guild settings
+YTDL_OPTIONS = get_ytdl_options()
 
 # yt-dlp options for playlists/albums
-YTDL_PLAYLIST_OPTIONS = {
-    'format': 'bestaudio/best',
-    'noplaylist': False,  # Allow playlists
-    'nocheckcertificate': True,
-    'ignoreerrors': True,  # Skip unavailable tracks
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'source_address': '0.0.0.0',
-    'extract_flat': False,  # Fully extract each track for proper metadata
-}
+YTDL_PLAYLIST_OPTIONS = get_ytdl_playlist_options()
 
-# FFmpeg options for audio playback
-FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
-}
+# FFmpeg options - fetched dynamically per-guild in play_next() to support ultra mode
+# Default options used as fallback
+FFMPEG_OPTIONS = get_ffmpeg_options()
 
 # Regex patterns for SoundCloud URLs
 SOUNDCLOUD_PATTERN = re.compile(r'https?://(www\.)?soundcloud\.com/.+')
@@ -1145,8 +1142,10 @@ class MusicPlayer:
             self.current.thumbnail = data.get('thumbnail', self.current.thumbnail)
             self.current.webpage_url = data.get('webpage_url', self.current.webpage_url)
 
-            # Create audio source
-            source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS)
+            # Create audio source with guild-specific optimized FFmpeg options
+            # This fetches settings dynamically to support ultra mode per-guild
+            ffmpeg_opts = get_ffmpeg_options(self.guild.id)
+            source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_opts)
             source = discord.PCMVolumeTransformer(source, volume=self.volume)
 
             # Mark loading complete before playing
