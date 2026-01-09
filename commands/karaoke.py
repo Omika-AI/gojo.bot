@@ -647,36 +647,50 @@ class Karaoke(commands.Cog):
                 if current_idx != last_line_idx:
                     last_line_idx = current_idx
 
-                    # Build updated embed based on mode
+                    # Build updated embed based on mode - show ALL lyrics
                     if session.mode == "duet":
-                        lyrics_display = self._format_duet_lyrics(session, current_time, current_idx)
+                        lyrics_display = self._format_all_lyrics_duet(session, current_time, current_idx)
+                        title = f"🎤 Duet: {session.singers[0].display_name} & {session.singers[1].display_name}"
                     else:
-                        lyrics_display = format_lyrics_progress(
-                            session.lyrics,
-                            current_time,
-                            session.song.duration
-                        )
-
-                    if session.mode == "solo":
+                        lyrics_display = self._format_all_lyrics_solo(session, current_time, current_idx)
                         title = f"🎤 Now Singing: {session.singers[0].display_name}"
-                    else:
-                        # Highlight current singer
-                        current_singer = session.get_current_singer_for_line(current_idx)
-                        if current_singer:
-                            title = f"🎤 {current_singer.display_name}'s Turn!"
-                        else:
-                            title = f"🎤 Duet: {session.singers[0].display_name} & {session.singers[1].display_name}"
 
                     embed = discord.Embed(
                         title=title,
                         description=f"**{session.song.title}** by *{session.song.artist}*",
                         color=discord.Color.magenta()
                     )
+
+                    # Add progress bar
+                    progress_bar = self._format_progress_bar(current_time, session.song.duration)
                     embed.add_field(
-                        name="Lyrics",
-                        value=lyrics_display,
+                        name="Progress",
+                        value=progress_bar,
                         inline=False
                     )
+
+                    # Add lyrics - use description if too long for a field
+                    if len(lyrics_display) > 1000:
+                        # Split into multiple fields if needed
+                        chunks = self._split_lyrics_into_chunks(lyrics_display, 1000)
+                        for i, chunk in enumerate(chunks[:3]):  # Max 3 fields
+                            field_name = "Lyrics" if i == 0 else "​"  # Zero-width space for continuation
+                            embed.add_field(name=field_name, value=chunk, inline=False)
+                    else:
+                        embed.add_field(
+                            name="Lyrics",
+                            value=lyrics_display,
+                            inline=False
+                        )
+
+                    # Add legend for duet mode
+                    if session.mode == "duet":
+                        embed.add_field(
+                            name="Legend",
+                            value=f"🔵 **{session.singers[0].display_name}** | 🟢 *{session.singers[1].display_name}*",
+                            inline=False
+                        )
+
                     embed.set_footer(text="🎵 Sing along! | Use the Stop button to end")
 
                     try:
@@ -695,54 +709,106 @@ class Karaoke(commands.Cog):
         except Exception as e:
             logger.error(f"Karaoke lyrics update error: {e}")
 
-    def _format_duet_lyrics(self, session: KaraokeSession, current_time: float, current_idx: int) -> str:
-        """Format lyrics for duet mode with singer indicators"""
-        lyrics = session.lyrics
-        duration = session.song.duration
-
-        if not lyrics:
-            return "*No lyrics loaded - check LRC file*"
-
-        # Progress bar
+    def _format_progress_bar(self, current_time: float, duration: float) -> str:
+        """Format a progress bar with time"""
         progress = min(1.0, current_time / duration) if duration > 0 else 0
         bar_length = 20
         filled = int(bar_length * progress)
-        bar = "=" * filled + "-" * (bar_length - filled)
+        bar = "▓" * filled + "░" * (bar_length - filled)
 
-        # Time display
         current_mins = int(current_time // 60)
         current_secs = int(current_time % 60)
         total_mins = int(duration // 60)
         total_secs = int(duration % 60)
         time_str = f"{current_mins}:{current_secs:02d} / {total_mins}:{total_secs:02d}"
 
-        # Build lyrics display with singer indicators
+        return f"`[{bar}]` {time_str}"
+
+    def _format_all_lyrics_solo(self, session: KaraokeSession, current_time: float, current_idx: int) -> str:
+        """Format ALL lyrics for solo mode with current line highlighted"""
+        lyrics = session.lyrics
+
+        if not lyrics:
+            return "*No lyrics loaded*"
+
         lines = []
-        context_lines = 2
+        for i, lyric in enumerate(lyrics):
+            # Skip empty or placeholder lines
+            if not lyric.text or lyric.text.startswith("--") or lyric.text.startswith("["):
+                continue
 
-        # Previous lines (dimmed)
-        start_idx = max(0, current_idx - context_lines)
-        for i in range(start_idx, current_idx):
-            singer = session.get_current_singer_for_line(i)
-            singer_tag = f"[{singer.display_name[:10]}]" if singer else ""
-            lines.append(f"*{singer_tag} {lyrics[i].text}*")  # Italic for past lines
+            if i == current_idx:
+                # Current line - bold and highlighted
+                lines.append(f"▶️ **{lyric.text}**")
+            elif i < current_idx:
+                # Past lines - dimmed
+                lines.append(f"~~{lyric.text}~~")
+            else:
+                # Upcoming lines - normal
+                lines.append(lyric.text)
 
-        # Current line (bold with singer highlighted)
-        if current_idx < len(lyrics):
-            singer = session.get_current_singer_for_line(current_idx)
-            singer_tag = f"🎤 {singer.display_name}" if singer else "🎤"
-            lines.append(f"**>> [{singer_tag}] {lyrics[current_idx].text} <<**")
+        return "\n".join(lines) if lines else "*No lyrics*"
 
-        # Upcoming lines
-        end_idx = min(len(lyrics), current_idx + context_lines + 1)
-        for i in range(current_idx + 1, end_idx):
-            singer = session.get_current_singer_for_line(i)
-            singer_tag = f"[{singer.display_name[:10]}]" if singer else ""
-            lines.append(f"{singer_tag} {lyrics[i].text}")
+    def _format_all_lyrics_duet(self, session: KaraokeSession, current_time: float, current_idx: int) -> str:
+        """Format ALL lyrics for duet mode with color-coded singers"""
+        lyrics = session.lyrics
 
-        lyrics_display = "\n".join(lines) if lines else "*Instrumental*"
+        if not lyrics:
+            return "*No lyrics loaded*"
 
-        return f"```\n[{bar}] {time_str}\n```\n\n{lyrics_display}"
+        lines = []
+        line_number = 0  # Track actual lyric lines for alternating
+
+        for i, lyric in enumerate(lyrics):
+            # Skip empty or placeholder lines
+            if not lyric.text or lyric.text.startswith("--") or lyric.text.startswith("["):
+                continue
+
+            # Determine which singer (alternating)
+            is_singer1 = (line_number % 2 == 0)
+            emoji = "🔵" if is_singer1 else "🟢"
+
+            if i == current_idx:
+                # Current line - highlighted with arrow
+                if is_singer1:
+                    lines.append(f"▶️ {emoji} **{lyric.text}**")
+                else:
+                    lines.append(f"▶️ {emoji} *{lyric.text}*")
+            elif i < current_idx:
+                # Past lines - strikethrough
+                lines.append(f"~~{emoji} {lyric.text}~~")
+            else:
+                # Upcoming lines
+                if is_singer1:
+                    lines.append(f"{emoji} **{lyric.text}**")
+                else:
+                    lines.append(f"{emoji} *{lyric.text}*")
+
+            line_number += 1
+
+        return "\n".join(lines) if lines else "*No lyrics*"
+
+    def _split_lyrics_into_chunks(self, text: str, max_length: int) -> List[str]:
+        """Split lyrics into chunks that fit in embed fields"""
+        lines = text.split("\n")
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for line in lines:
+            line_length = len(line) + 1  # +1 for newline
+            if current_length + line_length > max_length and current_chunk:
+                chunks.append("\n".join(current_chunk))
+                current_chunk = [line]
+                current_length = line_length
+            else:
+                current_chunk.append(line)
+                current_length += line_length
+
+        if current_chunk:
+            chunks.append("\n".join(current_chunk))
+
+        return chunks
 
     async def stop_karaoke_session(self, guild_id: int):
         """Stop a karaoke session"""
