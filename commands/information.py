@@ -206,6 +206,13 @@ COMMANDS_REGISTRY = [
         "category": "music",
         "permission": "manage_messages"
     },
+    {
+        "name": "/audiostatus",
+        "description": "Check current audio optimization settings for your server",
+        "usage": "/audiostatus",
+        "category": "music",
+        "permission": None
+    },
 
     # Moderation Commands (Require specific permissions)
     {
@@ -291,6 +298,13 @@ COMMANDS_REGISTRY = [
         "name": "/givecoins",
         "description": "Give coins to a user (preset amounts or custom)",
         "usage": "/givecoins @user",
+        "category": "admin",
+        "permission": "administrator"
+    },
+    {
+        "name": "/ultraoptimizemusic",
+        "description": "Toggle ultra audio quality mode for maximum music quality",
+        "usage": "/ultraoptimizemusic or /ultraoptimizemusic enable:True",
         "category": "admin",
         "permission": "administrator"
     },
@@ -537,7 +551,8 @@ class InformationView(View):
                 "• **Queue System** - Queue up multiple songs with remove buttons\n"
                 "• **Playback Controls** - Pause, resume, skip, shuffle\n"
                 "• **Volume Control** - Adjust volume as needed\n"
-                "• **Lyrics** - View song lyrics via Genius integration"
+                "• **Lyrics** - View song lyrics via Genius integration\n"
+                "• **Audio Optimization** - Smooth playback with Opus codec support"
             ),
             inline=False
         )

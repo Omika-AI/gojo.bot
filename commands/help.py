@@ -92,7 +92,7 @@ class Help(commands.Cog):
         )
 
         # Music Commands (Everyone)
-        music_cmds = "`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle`"
+        music_cmds = "`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle` `/audiostatus`"
         embed.add_field(
             name="🔊 Music",
             value=music_cmds,
@@ -110,7 +110,7 @@ class Help(commands.Cog):
 
         # Admin Commands (Admins only)
         if is_admin:
-            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins`"
+            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/ultraoptimizemusic`"
             embed.add_field(
                 name="👑 Admin",
                 value=admin_cmds,
