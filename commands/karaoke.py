@@ -654,9 +654,12 @@ class Karaoke(commands.Cog):
                         lyrics_display = self._format_all_lyrics_solo(session)
                         title = f"🎤 Now Singing: {session.singers[0].display_name}"
 
+                    # Format song duration
+                    duration_str = self._format_song_duration(session.song.duration)
+
                     embed = discord.Embed(
                         title=title,
-                        description=f"**{session.song.title}** by *{session.song.artist}*",
+                        description=f"**{session.song.title}** by *{session.song.artist}* • {duration_str}",
                         color=discord.Color.magenta()
                     )
 
@@ -707,19 +710,21 @@ class Karaoke(commands.Cog):
             logger.error(f"Karaoke update error: {e}")
 
     def _format_progress_bar(self, current_time: float, duration: float) -> str:
-        """Format a progress bar with time"""
+        """Format a progress bar with percentage"""
         progress = min(1.0, current_time / duration) if duration > 0 else 0
+        percentage = int(progress * 100)
+
         bar_length = 20
         filled = int(bar_length * progress)
         bar = "▓" * filled + "░" * (bar_length - filled)
 
-        current_mins = int(current_time // 60)
-        current_secs = int(current_time % 60)
-        total_mins = int(duration // 60)
-        total_secs = int(duration % 60)
-        time_str = f"{current_mins}:{current_secs:02d} / {total_mins}:{total_secs:02d}"
+        return f"`[{bar}]` **{percentage}%**"
 
-        return f"`[{bar}]` {time_str}"
+    def _format_song_duration(self, duration: float) -> str:
+        """Format song duration as mm:ss"""
+        mins = int(duration // 60)
+        secs = int(duration % 60)
+        return f"{mins}:{secs:02d}"
 
     def _format_all_lyrics_solo(self, session: KaraokeSession) -> str:
         """Format ALL lyrics for solo mode - static display"""
