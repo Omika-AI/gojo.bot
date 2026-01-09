@@ -1,12 +1,14 @@
 """
 Achievement Stats Command
 View detailed progress toward all achievements with progress bars
+Sends via webhook if one exists in the channel
 """
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import Optional
+import aiohttp
 
 from utils.logger import log_command, logger
 from utils.achievements_data import (
@@ -16,6 +18,7 @@ from utils.achievements_data import (
     format_progress_bar,
     format_stat_display
 )
+from utils.webhook_storage import get_channel_webhooks
 
 
 class AchievementStats(commands.Cog):
@@ -109,7 +112,40 @@ class AchievementStats(commands.Cog):
 
             embed.set_footer(text="Keep grinding to unlock achievements and earn special roles!")
 
-            await interaction.response.send_message(embed=embed)
+            # Check for webhook in this channel to send via webhook
+            webhooks = get_channel_webhooks(interaction.guild.id, interaction.channel.id)
+
+            if webhooks:
+                # Send via webhook
+                webhook_data = webhooks[0]  # Use the first webhook
+                webhook_url = webhook_data.get("url")
+
+                if webhook_url:
+                    # Acknowledge the interaction first
+                    await interaction.response.defer(ephemeral=True)
+
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            webhook = discord.Webhook.from_url(webhook_url, session=session)
+                            await webhook.send(
+                                embed=embed,
+                                username=self.bot.user.display_name if self.bot.user else "Gojo",
+                                avatar_url=self.bot.user.display_avatar.url if self.bot.user else None
+                            )
+
+                        await interaction.followup.send(
+                            "Achievement stats sent!",
+                            ephemeral=True
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send via webhook: {e}")
+                        # Fallback to regular message
+                        await interaction.followup.send(embed=embed)
+                else:
+                    await interaction.response.send_message(embed=embed)
+            else:
+                # No webhook, send regular message
+                await interaction.response.send_message(embed=embed)
 
         except Exception as e:
             logger.error(f"Error in /achievementstats command: {e}", exc_info=True)

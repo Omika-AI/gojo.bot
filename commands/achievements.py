@@ -1,12 +1,14 @@
 """
 Achievements Command
 View your or another user's earned achievements
+Sends via webhook if one exists in the channel
 """
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import Optional
+import aiohttp
 
 from utils.logger import log_command, logger
 from utils.achievements_data import (
@@ -15,6 +17,7 @@ from utils.achievements_data import (
     get_user_achievement_progress,
     get_achievement_role_id
 )
+from utils.webhook_storage import get_channel_webhooks
 
 
 class Achievements(commands.Cog):
@@ -51,7 +54,7 @@ class Achievements(commands.Cog):
             embed = discord.Embed(
                 title=f"🏆 {target_user.display_name}'s Achievements",
                 description=f"**{len(completed)}/{len(all_achievements)}** achievements unlocked",
-                color=discord.Color.gold() if completed else discord.Color.grey()
+                color=discord.Color.gold() if completed else discord.Color.light_grey()
             )
 
             # Use display_avatar for reliability
@@ -94,7 +97,40 @@ class Achievements(commands.Cog):
 
             embed.set_footer(text="Use /achievementstats to see detailed progress")
 
-            await interaction.response.send_message(embed=embed)
+            # Check for webhook in this channel to send via webhook
+            webhooks = get_channel_webhooks(interaction.guild.id, interaction.channel.id)
+
+            if webhooks:
+                # Send via webhook
+                webhook_data = webhooks[0]  # Use the first webhook
+                webhook_url = webhook_data.get("url")
+
+                if webhook_url:
+                    # Acknowledge the interaction first
+                    await interaction.response.defer(ephemeral=True)
+
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            webhook = discord.Webhook.from_url(webhook_url, session=session)
+                            await webhook.send(
+                                embed=embed,
+                                username=self.bot.user.display_name if self.bot.user else "Gojo",
+                                avatar_url=self.bot.user.display_avatar.url if self.bot.user else None
+                            )
+
+                        await interaction.followup.send(
+                            "Achievement info sent!",
+                            ephemeral=True
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send via webhook: {e}")
+                        # Fallback to regular message
+                        await interaction.followup.send(embed=embed)
+                else:
+                    await interaction.response.send_message(embed=embed)
+            else:
+                # No webhook, send regular message
+                await interaction.response.send_message(embed=embed)
 
         except Exception as e:
             logger.error(f"Error in /achievements command: {e}", exc_info=True)
