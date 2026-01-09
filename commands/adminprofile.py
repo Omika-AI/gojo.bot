@@ -7,6 +7,8 @@ Pages:
 1. Profile Overview - Basic user info, badges, permissions
 2. Warning History - All past warnings with reasons
 3. Server Stats - Server-specific activity and stats
+4. Economy Stats - Balance, gambling history, profit/loss
+5. Achievements - Completed and in-progress achievements
 """
 
 import discord
@@ -18,6 +20,15 @@ from typing import Optional
 
 from utils.logger import log_command, logger
 from utils.warnings_db import get_user_warnings
+from utils.economy_db import get_balance, get_user_stats as get_economy_stats
+from utils.achievements_data import (
+    get_user_stats as get_achievement_stats,
+    get_all_achievements,
+    get_achievement_role_id,
+    get_user_achievement_progress,
+    format_progress_bar,
+    format_stat_display
+)
 
 
 class AdminProfileView(View):
@@ -29,7 +40,7 @@ class AdminProfileView(View):
         self.target_user = target_user
         self.requester = requester
         self.current_page = 1
-        self.total_pages = 3
+        self.total_pages = 5
         self.warnings_page = 0  # For paginating through warnings
         self.warnings_per_page = 5
 
@@ -51,6 +62,10 @@ class AdminProfileView(View):
             return self._build_warnings_embed()
         elif self.current_page == 3:
             return self._build_server_stats_embed()
+        elif self.current_page == 4:
+            return self._build_economy_embed()
+        elif self.current_page == 5:
+            return self._build_achievements_embed()
         return self._build_overview_embed()
 
     def _build_overview_embed(self) -> discord.Embed:
@@ -153,7 +168,7 @@ class AdminProfileView(View):
         # Create embed
         embed = discord.Embed(
             title=f"📋 Profile: {user.display_name}",
-            description="**Page 1/3** - Profile Overview",
+            description="**Page 1/5** - Profile Overview",
             color=user.color if user.color != discord.Color.default() else discord.Color.blue()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -222,7 +237,7 @@ class AdminProfileView(View):
         # Create embed
         embed = discord.Embed(
             title=f"⚠️ Warning History: {user.display_name}",
-            description=f"**Page 2/3** - Warning History\n**Total Warnings:** {total_warnings}",
+            description=f"**Page 2/5** - Warning History\n**Total Warnings:** {total_warnings}",
             color=discord.Color.orange() if total_warnings > 0 else discord.Color.green()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -288,7 +303,7 @@ class AdminProfileView(View):
         # Create embed
         embed = discord.Embed(
             title=f"📈 Server Stats: {user.display_name}",
-            description=f"**Page 3/3** - Server Activity & Stats",
+            description=f"**Page 3/5** - Server Activity & Stats",
             color=discord.Color.purple()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -385,6 +400,218 @@ class AdminProfileView(View):
         embed.add_field(
             name="⚠️ Warnings",
             value=f"**Total on Record:** {warning_count}\n*(See Page 2 for details)*",
+            inline=True
+        )
+
+        embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+        embed.set_footer(text=f"Requested by {self.requester} • Use buttons to navigate")
+
+        return embed
+
+    def _build_economy_embed(self) -> discord.Embed:
+        """Build the economy/gambling stats embed (Page 4)"""
+        user = self.target_user
+        guild = user.guild
+
+        # Get economy stats for this user
+        economy_stats = get_economy_stats(guild.id, user.id)
+        balance = economy_stats.get("balance", 0)
+        daily_streak = economy_stats.get("daily_streak", 0)
+        total_earned = economy_stats.get("total_earned", 0)
+        total_gambled = economy_stats.get("total_gambled", 0)
+        total_won = economy_stats.get("total_won", 0)
+        total_lost = economy_stats.get("total_lost", 0)
+
+        # Calculate net gambling profit/loss
+        net_gambling = total_won - total_lost
+
+        # Create embed
+        embed = discord.Embed(
+            title=f"💰 Economy Stats: {user.display_name}",
+            description=f"**Page 4/5** - Economy & Gambling Statistics",
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        # Current balance (big and prominent)
+        embed.add_field(
+            name="💵 Current Balance",
+            value=f"**{balance:,}** coins",
+            inline=True
+        )
+
+        embed.add_field(
+            name="📅 Daily Streak",
+            value=f"**{daily_streak}** days",
+            inline=True
+        )
+
+        embed.add_field(
+            name="💎 Total Earned",
+            value=f"**{total_earned:,}** coins",
+            inline=True
+        )
+
+        # Gambling statistics section
+        embed.add_field(name="\u200b", value="**🎰 Gambling Statistics**", inline=False)
+
+        embed.add_field(
+            name="🎲 Total Gambled",
+            value=f"**{total_gambled:,}** coins",
+            inline=True
+        )
+
+        embed.add_field(
+            name="✅ Total Won",
+            value=f"**{total_won:,}** coins",
+            inline=True
+        )
+
+        embed.add_field(
+            name="❌ Total Lost",
+            value=f"**{total_lost:,}** coins",
+            inline=True
+        )
+
+        # Net profit/loss with color indicator
+        if net_gambling >= 0:
+            profit_emoji = "📈"
+            profit_text = f"+{net_gambling:,}"
+        else:
+            profit_emoji = "📉"
+            profit_text = f"{net_gambling:,}"
+
+        embed.add_field(
+            name=f"{profit_emoji} Net Gambling Profit",
+            value=f"**{profit_text}** coins",
+            inline=True
+        )
+
+        # Win rate calculation
+        if total_gambled > 0:
+            win_rate = (total_won / total_gambled) * 100
+            embed.add_field(
+                name="📊 Return Rate",
+                value=f"**{win_rate:.1f}%**",
+                inline=True
+            )
+        else:
+            embed.add_field(
+                name="📊 Return Rate",
+                value="N/A (no gambling)",
+                inline=True
+            )
+
+        embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+        # Gambling verdict
+        if total_gambled == 0:
+            verdict = "🚫 Has never gambled"
+        elif net_gambling > 10000:
+            verdict = "🎰 High roller winner!"
+        elif net_gambling > 0:
+            verdict = "🍀 Lucky gambler"
+        elif net_gambling == 0:
+            verdict = "⚖️ Breaking even"
+        elif net_gambling > -5000:
+            verdict = "😬 Slight losses"
+        else:
+            verdict = "💸 Deep in the hole"
+
+        embed.add_field(
+            name="🏷️ Gambling Status",
+            value=verdict,
+            inline=False
+        )
+
+        embed.set_footer(text=f"Requested by {self.requester} • Use buttons to navigate")
+
+        return embed
+
+    def _build_achievements_embed(self) -> discord.Embed:
+        """Build the achievements embed (Page 5)"""
+        user = self.target_user
+        guild = user.guild
+
+        # Get achievement stats
+        achievement_stats = get_achievement_stats(user.id)
+        completed = achievement_stats.get("completed_achievements", [])
+        all_achievements = get_all_achievements()
+
+        # Create embed
+        embed = discord.Embed(
+            title=f"🏆 Achievements: {user.display_name}",
+            description=f"**Page 5/5** - Achievement Progress\n**{len(completed)}/{len(all_achievements)}** achievements unlocked",
+            color=discord.Color.gold() if completed else discord.Color.light_grey()
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        # Show completed achievements
+        if completed:
+            completed_list = []
+            for achievement in all_achievements:
+                if achievement.id in completed:
+                    role_id = get_achievement_role_id(achievement.id)
+                    role_text = ""
+                    if role_id:
+                        role = guild.get_role(role_id)
+                        if role:
+                            role_text = f" → {role.mention}"
+                    completed_list.append(f"{achievement.emoji} **{achievement.name}**{role_text}")
+
+            # Split into chunks if too many
+            completed_text = "\n".join(completed_list) if completed_list else "None yet!"
+            if len(completed_text) > 1024:
+                completed_text = completed_text[:1000] + "\n*...and more*"
+
+            embed.add_field(
+                name="✅ Completed Achievements",
+                value=completed_text,
+                inline=False
+            )
+
+        # Show progress on incomplete achievements
+        locked = [a for a in all_achievements if a.id not in completed]
+        if locked:
+            progress_list = []
+            for achievement in locked[:5]:  # Show top 5 incomplete
+                current, goal, percentage = get_user_achievement_progress(user.id, achievement.id)
+                bar = format_progress_bar(current, goal, bar_length=10)
+                stat_display = format_stat_display(achievement.stat_key, current)
+                progress_list.append(
+                    f"{achievement.emoji} **{achievement.name}**\n"
+                    f"{bar} {stat_display} / {format_stat_display(achievement.stat_key, goal)} ({percentage:.0f}%)"
+                )
+
+            if len(locked) > 5:
+                progress_list.append(f"\n*...and {len(locked) - 5} more locked*")
+
+            embed.add_field(
+                name="🔒 In Progress",
+                value="\n".join(progress_list),
+                inline=False
+            )
+
+        # Quick stats overview
+        messages = achievement_stats.get("messages_sent", 0)
+        commands_used = achievement_stats.get("commands_used", 0)
+        voice_time = achievement_stats.get("voice_time", 0)
+        voice_hours = voice_time / 3600
+
+        embed.add_field(
+            name="📊 Quick Stats",
+            value=f"💬 Messages: **{messages:,}**\n⚡ Commands: **{commands_used:,}**\n🎧 Voice: **{voice_hours:.1f}h**",
+            inline=True
+        )
+
+        gambling_wins = achievement_stats.get("gambling_winnings", 0)
+        max_streak = achievement_stats.get("max_win_streak", 0)
+        peak_balance = achievement_stats.get("peak_balance", 0)
+
+        embed.add_field(
+            name="🎰 Gambling Stats",
+            value=f"💰 Winnings: **{gambling_wins:,}**\n🍀 Best Streak: **{max_streak}**\n💎 Peak Balance: **{peak_balance:,}**",
             inline=True
         )
 
