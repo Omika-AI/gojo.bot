@@ -24,8 +24,6 @@ from utils.karaoke_data import (
     get_all_songs,
     get_song_by_id,
     load_song_lyrics,
-    format_lyrics_progress,
-    get_current_lyric,
     KaraokeSong,
     LyricLine
 )
@@ -633,26 +631,27 @@ class Karaoke(commands.Cog):
             )
 
     async def _update_lyrics_loop(self, session: KaraokeSession):
-        """Background task to update lyrics display"""
+        """Background task to update progress bar only"""
         try:
-            last_line_idx = -1
+            # Calculate update interval: 1/10 of song duration
+            update_interval = session.song.duration / 10
+            last_update_segment = -1
 
             while session.is_playing and session.guild_id in self.sessions:
                 current_time = session.elapsed_time
 
-                # Get current lyric position
-                current_idx, _ = get_current_lyric(session.lyrics, current_time)
+                # Only update every 1/10 of the song
+                current_segment = int(current_time / update_interval) if update_interval > 0 else 0
 
-                # Only update if we've moved to a new line
-                if current_idx != last_line_idx:
-                    last_line_idx = current_idx
+                if current_segment != last_update_segment:
+                    last_update_segment = current_segment
 
-                    # Build updated embed based on mode - show ALL lyrics
+                    # Build embed with static lyrics
                     if session.mode == "duet":
-                        lyrics_display = self._format_all_lyrics_duet(session, current_time, current_idx)
+                        lyrics_display = self._format_all_lyrics_duet(session)
                         title = f"🎤 Duet: {session.singers[0].display_name} & {session.singers[1].display_name}"
                     else:
-                        lyrics_display = self._format_all_lyrics_solo(session, current_time, current_idx)
+                        lyrics_display = self._format_all_lyrics_solo(session)
                         title = f"🎤 Now Singing: {session.singers[0].display_name}"
 
                     embed = discord.Embed(
@@ -669,12 +668,11 @@ class Karaoke(commands.Cog):
                         inline=False
                     )
 
-                    # Add lyrics - use description if too long for a field
+                    # Add lyrics - split if too long
                     if len(lyrics_display) > 1000:
-                        # Split into multiple fields if needed
                         chunks = self._split_lyrics_into_chunks(lyrics_display, 1000)
-                        for i, chunk in enumerate(chunks[:3]):  # Max 3 fields
-                            field_name = "Lyrics" if i == 0 else "​"  # Zero-width space for continuation
+                        for i, chunk in enumerate(chunks[:3]):
+                            field_name = "Lyrics" if i == 0 else "​"
                             embed.add_field(name=field_name, value=chunk, inline=False)
                     else:
                         embed.add_field(
@@ -696,18 +694,17 @@ class Karaoke(commands.Cog):
                     try:
                         await session.message.edit(embed=embed)
                     except discord.errors.NotFound:
-                        # Message was deleted
                         break
                     except Exception as e:
-                        logger.warning(f"Failed to update karaoke lyrics: {e}")
+                        logger.warning(f"Failed to update karaoke progress: {e}")
 
-                # Check every 250ms for faster updates
-                await asyncio.sleep(0.25)
+                # Check every second
+                await asyncio.sleep(1)
 
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.error(f"Karaoke lyrics update error: {e}")
+            logger.error(f"Karaoke update error: {e}")
 
     def _format_progress_bar(self, current_time: float, duration: float) -> str:
         """Format a progress bar with time"""
@@ -724,8 +721,8 @@ class Karaoke(commands.Cog):
 
         return f"`[{bar}]` {time_str}"
 
-    def _format_all_lyrics_solo(self, session: KaraokeSession, current_time: float, current_idx: int) -> str:
-        """Format ALL lyrics for solo mode with current line highlighted"""
+    def _format_all_lyrics_solo(self, session: KaraokeSession) -> str:
+        """Format ALL lyrics for solo mode - static display"""
         lyrics = session.lyrics
 
         if not lyrics:
@@ -734,7 +731,7 @@ class Karaoke(commands.Cog):
         lines = []
         prev_timestamp = 0
 
-        for i, lyric in enumerate(lyrics):
+        for lyric in lyrics:
             # Skip empty or placeholder lines
             if not lyric.text or lyric.text.startswith("--") or lyric.text.startswith("["):
                 continue
@@ -744,21 +741,12 @@ class Karaoke(commands.Cog):
                 lines.append("")  # Empty line for spacing
 
             prev_timestamp = lyric.timestamp
-
-            if i == current_idx:
-                # Current line - bold and highlighted
-                lines.append(f"▶️ **{lyric.text}**")
-            elif i < current_idx:
-                # Past lines - dimmed
-                lines.append(f"~~{lyric.text}~~")
-            else:
-                # Upcoming lines - normal
-                lines.append(lyric.text)
+            lines.append(lyric.text)
 
         return "\n".join(lines) if lines else "*No lyrics*"
 
-    def _format_all_lyrics_duet(self, session: KaraokeSession, current_time: float, current_idx: int) -> str:
-        """Format ALL lyrics for duet mode with color-coded singers"""
+    def _format_all_lyrics_duet(self, session: KaraokeSession) -> str:
+        """Format ALL lyrics for duet mode with color-coded singers - static display"""
         lyrics = session.lyrics
 
         if not lyrics:
@@ -768,7 +756,7 @@ class Karaoke(commands.Cog):
         line_number = 0  # Track actual lyric lines for alternating
         prev_timestamp = 0
 
-        for i, lyric in enumerate(lyrics):
+        for lyric in lyrics:
             # Skip empty or placeholder lines
             if not lyric.text or lyric.text.startswith("--") or lyric.text.startswith("["):
                 continue
@@ -783,21 +771,11 @@ class Karaoke(commands.Cog):
             is_singer1 = (line_number % 2 == 0)
             emoji = "🔵" if is_singer1 else "🟢"
 
-            if i == current_idx:
-                # Current line - highlighted with arrow
-                if is_singer1:
-                    lines.append(f"▶️ {emoji} **{lyric.text}**")
-                else:
-                    lines.append(f"▶️ {emoji} *{lyric.text}*")
-            elif i < current_idx:
-                # Past lines - strikethrough
-                lines.append(f"~~{emoji} {lyric.text}~~")
+            # Static display with singer colors
+            if is_singer1:
+                lines.append(f"{emoji} **{lyric.text}**")
             else:
-                # Upcoming lines
-                if is_singer1:
-                    lines.append(f"{emoji} **{lyric.text}**")
-                else:
-                    lines.append(f"{emoji} *{lyric.text}*")
+                lines.append(f"{emoji} *{lyric.text}*")
 
             line_number += 1
 
