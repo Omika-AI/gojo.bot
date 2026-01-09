@@ -426,9 +426,17 @@ class Karaoke(commands.Cog):
 
         return True
 
-    async def _perform_countdown(self, channel: discord.TextChannel, singers: List[discord.Member], mode: str) -> discord.Message:
+    async def _perform_countdown(
+        self,
+        channel: discord.TextChannel,
+        singers: List[discord.Member],
+        mode: str,
+        song: KaraokeSong,
+        lyrics: list
+    ) -> discord.Message:
         """
         Perform a 5-second countdown before the song starts
+        Shows lyrics so singers can prepare
         Returns the countdown message for later editing
         """
         # Build singer announcement
@@ -437,10 +445,16 @@ class Karaoke(commands.Cog):
         else:
             singer_text = f"🎵 **{singers[0].display_name}** & **{singers[1].display_name}** 🎵"
 
-        # Initial countdown embed
+        # Format song duration
+        duration_str = self._format_song_duration(song.duration)
+
+        # Build lyrics preview (first portion to fit in embed)
+        lyrics_preview = self._build_lyrics_preview(lyrics, mode, singers)
+
+        # Initial countdown embed with lyrics
         embed = discord.Embed(
             title="🎤 GET READY!",
-            description=f"Now performing: {singer_text}",
+            description=f"**{song.title}** by *{song.artist}* • {duration_str}\n\nPerforming: {singer_text}",
             color=discord.Color.red()
         )
         embed.add_field(
@@ -448,7 +462,17 @@ class Karaoke(commands.Cog):
             value="```\n   🔴 5 🔴\n```",
             inline=False
         )
-        embed.set_footer(text="Get ready to sing!")
+
+        # Add lyrics preview
+        if len(lyrics_preview) > 1000:
+            chunks = self._split_lyrics_into_chunks(lyrics_preview, 1000)
+            for i, chunk in enumerate(chunks[:2]):
+                field_name = "📜 Lyrics Preview" if i == 0 else "​"
+                embed.add_field(name=field_name, value=chunk, inline=False)
+        else:
+            embed.add_field(name="📜 Lyrics Preview", value=lyrics_preview, inline=False)
+
+        embed.set_footer(text="Read through the lyrics and get ready!")
 
         countdown_msg = await channel.send(embed=embed)
 
@@ -484,6 +508,39 @@ class Karaoke(commands.Cog):
         # Brief pause then return
         await asyncio.sleep(0.5)
         return countdown_msg
+
+    def _build_lyrics_preview(self, lyrics: list, mode: str, singers: List[discord.Member]) -> str:
+        """Build a lyrics preview for the countdown screen"""
+        if not lyrics:
+            return "*No lyrics available*"
+
+        lines = []
+        line_number = 0
+        prev_timestamp = 0
+
+        for lyric in lyrics:
+            if not lyric.text or lyric.text.startswith("--") or lyric.text.startswith("["):
+                continue
+
+            # Add spacing for verse breaks
+            if lyric.timestamp - prev_timestamp > 4 and lines:
+                lines.append("")
+
+            prev_timestamp = lyric.timestamp
+
+            if mode == "duet":
+                is_singer1 = (line_number % 2 == 0)
+                emoji = "🔵" if is_singer1 else "🟢"
+                if is_singer1:
+                    lines.append(f"{emoji} **{lyric.text}**")
+                else:
+                    lines.append(f"{emoji} *{lyric.text}*")
+            else:
+                lines.append(lyric.text)
+
+            line_number += 1
+
+        return "\n".join(lines) if lines else "*No lyrics*"
 
     async def start_karaoke_session(
         self,
@@ -558,7 +615,7 @@ class Karaoke(commands.Cog):
         await interaction.followup.send(embed=preparing_embed)
 
         # Perform the countdown!
-        await self._perform_countdown(interaction.channel, singers, mode)
+        await self._perform_countdown(interaction.channel, singers, mode, song, lyrics)
 
         # Create initial lyrics embed
         if mode == "solo":

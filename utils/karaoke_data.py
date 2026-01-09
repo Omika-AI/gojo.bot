@@ -88,7 +88,7 @@ KARAOKE_SONGS: Dict[str, KaraokeSong] = {
         title="Something Blue",
         artist="VOILA",
         soundcloud_url="https://soundcloud.com/search?q=something%20blue%20voila",  # Replace with actual URL
-        duration=180,  # 3:00 (approximate)
+        duration=187,  # 3:07
         lyrics_file="something_blue.lrc"
     ),
 }
