@@ -84,7 +84,7 @@ class Help(commands.Cog):
         )
 
         # Gambling Commands (Everyone)
-        gambling_cmds = "`/blackjack` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`"
+        gambling_cmds = "`/blackjack` `/roulette` `/roulettenumber` `/roulettetable` `/coinflip` `/guessnumber`"
         embed.add_field(
             name="🎰 Gambling",
             value=gambling_cmds,

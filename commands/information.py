@@ -101,8 +101,15 @@ COMMANDS_REGISTRY = [
     },
     {
         "name": "/roulettenumber",
-        "description": "Bet on a specific number 0-36 (36x payout!)",
-        "usage": "/roulettenumber bet:100 number:17",
+        "description": "Bet on one or more numbers (36x for 1, 18x for 2, etc.)",
+        "usage": "/roulettenumber bet:100 numbers:7 OR numbers:7, 17, 23 OR numbers:1-6",
+        "category": "gambling",
+        "permission": None
+    },
+    {
+        "name": "/roulettetable",
+        "description": "View the roulette betting table with all numbers and payouts",
+        "usage": "/roulettetable",
         "category": "gambling",
         "permission": None
     },
@@ -575,6 +582,8 @@ class InformationView(View):
             value=(
                 "• **Blackjack** - Classic card game vs dealer (1x-1.5x payout)\n"
                 "• **Roulette** - Bet on colors, numbers, or ranges (2x-36x payout)\n"
+                "• **Multi-Number Roulette** - Bet on multiple numbers at once!\n"
+                "• **Roulette Table** - View the visual betting table\n"
                 "• **Coinflip Duel** - Challenge other players for coins\n"
                 "• **Guess the Number** - High risk game with 500x payout!"
             ),
