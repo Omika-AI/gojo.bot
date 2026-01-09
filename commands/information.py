@@ -220,6 +220,13 @@ COMMANDS_REGISTRY = [
         "category": "music",
         "permission": None
     },
+    {
+        "name": "/karaoke",
+        "description": "Start a karaoke session with synced lyrics display",
+        "usage": "/karaoke (then select a song)",
+        "category": "music",
+        "permission": None
+    },
 
     # Moderation Commands (Require specific permissions)
     {
@@ -559,6 +566,7 @@ class InformationView(View):
                 "• **Playback Controls** - Pause, resume, skip, shuffle\n"
                 "• **Volume Control** - Adjust volume as needed\n"
                 "• **Lyrics** - View song lyrics via Genius integration\n"
+                "• **Karaoke Mode** - Sing along with synced lyrics display!\n"
                 "• **Audio Optimization** - Smooth playback with Opus codec support"
             ),
             inline=False
