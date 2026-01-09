@@ -198,11 +198,11 @@ class KaraokeControlView(View):
             )
             return
 
+        # Acknowledge the interaction first to prevent "Interaction Failed"
+        await interaction.response.defer()
+
+        # Stop the session (this will update the message)
         await self.cog.stop_karaoke_session(self.guild_id)
-        await interaction.response.send_message(
-            "Karaoke session ended! Thanks for singing! 🎤",
-            ephemeral=False
-        )
         self.stop()
 
 
@@ -701,8 +701,8 @@ class Karaoke(commands.Cog):
                     except Exception as e:
                         logger.warning(f"Failed to update karaoke lyrics: {e}")
 
-                # Check every 500ms for smoother updates
-                await asyncio.sleep(0.5)
+                # Check every 250ms for faster updates
+                await asyncio.sleep(0.25)
 
         except asyncio.CancelledError:
             pass
@@ -732,10 +732,18 @@ class Karaoke(commands.Cog):
             return "*No lyrics loaded*"
 
         lines = []
+        prev_timestamp = 0
+
         for i, lyric in enumerate(lyrics):
             # Skip empty or placeholder lines
             if not lyric.text or lyric.text.startswith("--") or lyric.text.startswith("["):
                 continue
+
+            # Add spacing if there's a gap of 4+ seconds (verse break)
+            if lyric.timestamp - prev_timestamp > 4 and lines:
+                lines.append("")  # Empty line for spacing
+
+            prev_timestamp = lyric.timestamp
 
             if i == current_idx:
                 # Current line - bold and highlighted
@@ -758,11 +766,18 @@ class Karaoke(commands.Cog):
 
         lines = []
         line_number = 0  # Track actual lyric lines for alternating
+        prev_timestamp = 0
 
         for i, lyric in enumerate(lyrics):
             # Skip empty or placeholder lines
             if not lyric.text or lyric.text.startswith("--") or lyric.text.startswith("["):
                 continue
+
+            # Add spacing if there's a gap of 4+ seconds (verse break)
+            if lyric.timestamp - prev_timestamp > 4 and lines:
+                lines.append("")  # Empty line for spacing
+
+            prev_timestamp = lyric.timestamp
 
             # Determine which singer (alternating)
             is_singer1 = (line_number % 2 == 0)
@@ -832,7 +847,7 @@ class Karaoke(commands.Cog):
                 session.voice_client.stop()
             await session.voice_client.disconnect()
 
-        # Update final message
+        # Update final message - compact end state
         try:
             if session.mode == "solo":
                 thanks_to = session.singers[0].display_name
@@ -840,12 +855,18 @@ class Karaoke(commands.Cog):
                 thanks_to = f"{session.singers[0].display_name} & {session.singers[1].display_name}"
 
             embed = discord.Embed(
-                title="🎤 Karaoke Session Ended",
-                description=f"Amazing performance by **{thanks_to}**!\nThanks for singing **{session.song.title}**! 👏",
-                color=discord.Color.grey()
+                title="🎤 Session Complete",
+                description=f"**{session.song.title}** - *{session.song.artist}*\nPerformed by **{thanks_to}** 👏",
+                color=discord.Color.dark_grey()
             )
-            embed.set_footer(text="Use /karaokesolo or /karaokeduet to start again!")
             await session.message.edit(embed=embed, view=None)
+
+            # Delete the message after 15 seconds to keep chat clean
+            await asyncio.sleep(15)
+            try:
+                await session.message.delete()
+            except:
+                pass
         except:
             pass
 
