@@ -20,6 +20,7 @@ from typing import Optional, List, Tuple
 
 import config
 from utils.logger import log_command, logger
+from utils.achievements_data import update_user_stat, check_and_complete_achievements
 from utils.karaoke_data import (
     get_all_songs,
     get_song_by_id,
@@ -898,6 +899,20 @@ class Karaoke(commands.Cog):
                 color=discord.Color.dark_grey()
             )
             await session.message.edit(embed=embed, view=None)
+
+            # Track achievements for participants
+            try:
+                for singer in session.singers:
+                    # Track karaoke sessions for everyone
+                    update_user_stat(singer.id, "karaoke_sessions", increment=1)
+
+                    # Track duets specifically for duet mode
+                    if session.mode == "duet":
+                        update_user_stat(singer.id, "karaoke_duets", increment=1)
+
+                    check_and_complete_achievements(singer.id)
+            except Exception as e:
+                logger.debug(f"Failed to track karaoke achievement: {e}")
 
             # Delete the message after 15 seconds to keep chat clean
             await asyncio.sleep(15)

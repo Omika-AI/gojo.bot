@@ -27,6 +27,10 @@ from utils.economy_db import (
     DAILY_STREAK_BONUS,
     MAX_STREAK_BONUS
 )
+from utils.achievements_data import (
+    update_user_stat as update_achievement_stat,
+    check_and_complete_achievements
+)
 
 
 # =============================================================================
@@ -226,6 +230,13 @@ class Economy(commands.Cog):
 
         # Calculate streak bonus for display
         streak_bonus = min(streak * DAILY_STREAK_BONUS, MAX_STREAK_BONUS)
+
+        # Track achievement progress for daily streak
+        try:
+            update_achievement_stat(interaction.user.id, "max_daily_streak", value=streak)
+            check_and_complete_achievements(interaction.user.id)
+        except:
+            pass
 
         embed = discord.Embed(
             title="Daily Coins Claimed!",

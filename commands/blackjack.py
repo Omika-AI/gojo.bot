@@ -20,6 +20,7 @@ from typing import List, Tuple
 import config
 from utils.logger import log_command, logger
 from utils.economy_db import get_balance, add_coins, remove_coins, record_gamble
+from utils.achievements_data import update_user_stat, check_and_complete_achievements, get_user_stats
 
 
 # Card suits and values
@@ -301,6 +302,7 @@ class BlackjackView(View):
     async def _end_game(self, interaction: discord.Interaction):
         """Handle end of game payouts"""
         payout = self.game.get_payout()
+        user_id = self.game.player.id
 
         if self.game.result == "push":
             # Return the bet
@@ -309,9 +311,30 @@ class BlackjackView(View):
             # Player won - add winnings (bet was already taken, add bet + winnings)
             add_coins(self.guild_id, self.game.player.id, self.game.bet + payout, source="blackjack_win")
             record_gamble(self.guild_id, self.game.player.id, self.original_bet, True, payout)
+
+            # Track achievement progress
+            try:
+                # Track gambling winnings
+                update_user_stat(user_id, "gambling_winnings", increment=payout)
+
+                # Track win streak
+                stats = get_user_stats(user_id)
+                current_streak = stats.get("current_win_streak", 0) + 1
+                update_user_stat(user_id, "current_win_streak", value=current_streak)
+                update_user_stat(user_id, "max_win_streak", value=current_streak)
+
+                check_and_complete_achievements(user_id)
+            except Exception as e:
+                logger.debug(f"Failed to track gambling achievement: {e}")
         else:
             # Player lost - bet was already taken
             record_gamble(self.guild_id, self.game.player.id, self.original_bet, False)
+
+            # Reset win streak on loss
+            try:
+                update_user_stat(user_id, "current_win_streak", value=0)
+            except:
+                pass
 
         self._disable_all()
         await interaction.response.edit_message(embed=self.game.build_embed(), view=self)
@@ -352,6 +375,7 @@ class BlackjackView(View):
         """Handle timeout - auto-stand"""
         if not self.game.game_over:
             self.game.stand()
+            user_id = self.game.player.id
 
             payout = self.game.get_payout()
             if self.game.result == "push":
@@ -359,8 +383,23 @@ class BlackjackView(View):
             elif payout > 0:
                 add_coins(self.guild_id, self.game.player.id, self.game.bet + payout, source="blackjack_win")
                 record_gamble(self.guild_id, self.game.player.id, self.original_bet, True, payout)
+
+                # Track achievement progress
+                try:
+                    update_user_stat(user_id, "gambling_winnings", increment=payout)
+                    stats = get_user_stats(user_id)
+                    current_streak = stats.get("current_win_streak", 0) + 1
+                    update_user_stat(user_id, "current_win_streak", value=current_streak)
+                    update_user_stat(user_id, "max_win_streak", value=current_streak)
+                    check_and_complete_achievements(user_id)
+                except:
+                    pass
             else:
                 record_gamble(self.guild_id, self.game.player.id, self.original_bet, False)
+                try:
+                    update_user_stat(user_id, "current_win_streak", value=0)
+                except:
+                    pass
 
             self._disable_all()
             if self.message:
@@ -420,13 +459,29 @@ class Blackjack(commands.Cog):
         # If game is already over (blackjack), handle payout
         if game.game_over:
             payout = game.get_payout()
+            user_id = interaction.user.id
             if game.result == "push":
                 add_coins(interaction.guild.id, interaction.user.id, bet, source="blackjack_push")
             elif payout > 0:
                 add_coins(interaction.guild.id, interaction.user.id, bet + payout, source="blackjack_win")
                 record_gamble(interaction.guild.id, interaction.user.id, bet, True, payout)
+
+                # Track achievement progress
+                try:
+                    update_user_stat(user_id, "gambling_winnings", increment=payout)
+                    stats = get_user_stats(user_id)
+                    current_streak = stats.get("current_win_streak", 0) + 1
+                    update_user_stat(user_id, "current_win_streak", value=current_streak)
+                    update_user_stat(user_id, "max_win_streak", value=current_streak)
+                    check_and_complete_achievements(user_id)
+                except:
+                    pass
             else:
                 record_gamble(interaction.guild.id, interaction.user.id, bet, False)
+                try:
+                    update_user_stat(user_id, "current_win_streak", value=0)
+                except:
+                    pass
             view._disable_all()
 
         await interaction.response.send_message(embed=game.build_embed(), view=view)

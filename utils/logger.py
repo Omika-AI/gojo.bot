@@ -81,6 +81,14 @@ def log_command(user: str, user_id: int, command: str, guild: str = None):
     location = f"in {guild}" if guild else "in DMs"
     logger.info(f"Command /{command} used by {user} (ID: {user_id}) {location}")
 
+    # Track commands_used for achievements
+    try:
+        from utils.achievements_data import update_user_stat, check_and_complete_achievements
+        update_user_stat(user_id, "commands_used", increment=1)
+        check_and_complete_achievements(user_id)
+    except:
+        pass
+
 
 def log_error(error: Exception, context: str = None):
     """

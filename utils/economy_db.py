@@ -11,6 +11,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Tuple
 from utils.logger import logger
+from utils.achievements_data import update_user_stat as update_achievement_stat, check_and_complete_achievements
 
 # Path to the economy data file
 ECONOMY_FILE = "data/economy.json"
@@ -104,6 +105,14 @@ def add_coins(guild_id: int, user_id: int, amount: int, source: str = "unknown")
     user_data["total_earned"] += amount
     _update_user_data(guild_id, user_id, user_data)
     logger.info(f"Added {amount} coins to user {user_id} in guild {guild_id} (source: {source})")
+
+    # Track peak_balance achievement
+    try:
+        update_achievement_stat(user_id, "peak_balance", value=user_data["balance"])
+        check_and_complete_achievements(user_id)
+    except:
+        pass
+
     return user_data["balance"]
 
 

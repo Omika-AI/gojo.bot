@@ -18,6 +18,7 @@ import asyncio
 import config
 from utils.logger import log_command, logger
 from utils.economy_db import get_balance, add_coins, remove_coins, record_gamble
+from utils.achievements_data import update_user_stat, check_and_complete_achievements, get_user_stats
 
 
 # Game configuration
@@ -105,11 +106,24 @@ class GuessNumber(commands.Cog):
         winning_number = random.randint(MIN_NUMBER, MAX_NUMBER)
         won = (guess == winning_number)
 
+        user_id = interaction.user.id
         if won:
             # JACKPOT!
             payout = bet * MULTIPLIER
+            profit = payout - bet
             add_coins(interaction.guild.id, interaction.user.id, payout, source="guessnumber_jackpot")
-            record_gamble(interaction.guild.id, interaction.user.id, bet, True, payout - bet)
+            record_gamble(interaction.guild.id, interaction.user.id, bet, True, profit)
+
+            # Track achievements
+            try:
+                update_user_stat(user_id, "gambling_winnings", increment=profit)
+                stats = get_user_stats(user_id)
+                current_streak = stats.get("current_win_streak", 0) + 1
+                update_user_stat(user_id, "current_win_streak", value=current_streak)
+                update_user_stat(user_id, "max_win_streak", value=current_streak)
+                check_and_complete_achievements(user_id)
+            except:
+                pass
 
             result_embed = discord.Embed(
                 title="JACKPOT!!!",
@@ -129,6 +143,12 @@ class GuessNumber(commands.Cog):
         else:
             # Lost
             record_gamble(interaction.guild.id, interaction.user.id, bet, False)
+
+            # Reset win streak
+            try:
+                update_user_stat(user_id, "current_win_streak", value=0)
+            except:
+                pass
 
             # Determine how close they were
             difference = abs(guess - winning_number)

@@ -24,6 +24,7 @@ from typing import List, Set, Optional
 import config
 from utils.logger import log_command, logger
 from utils.economy_db import get_balance, add_coins, remove_coins, record_gamble
+from utils.achievements_data import update_user_stat, check_and_complete_achievements, get_user_stats
 
 
 # Roulette wheel configuration
@@ -411,6 +412,7 @@ class Roulette(commands.Cog):
         won, multiplier = check_win(bet_type, result)
 
         # Calculate payout
+        user_id = interaction.user.id
         if won:
             payout = bet * multiplier
             add_coins(interaction.guild.id, interaction.user.id, payout, source="roulette_win")
@@ -418,10 +420,27 @@ class Roulette(commands.Cog):
             record_gamble(interaction.guild.id, interaction.user.id, bet, True, profit)
             result_color = discord.Color.green()
             result_text = f"**YOU WIN!** +{profit:,} coins"
+
+            # Track achievements
+            try:
+                update_user_stat(user_id, "gambling_winnings", increment=profit)
+                stats = get_user_stats(user_id)
+                current_streak = stats.get("current_win_streak", 0) + 1
+                update_user_stat(user_id, "current_win_streak", value=current_streak)
+                update_user_stat(user_id, "max_win_streak", value=current_streak)
+                check_and_complete_achievements(user_id)
+            except:
+                pass
         else:
             record_gamble(interaction.guild.id, interaction.user.id, bet, False)
             result_color = discord.Color.red()
             result_text = f"**You lose!** -{bet:,} coins"
+
+            # Reset win streak
+            try:
+                update_user_stat(user_id, "current_win_streak", value=0)
+            except:
+                pass
 
         # Result embed
         result_embed = discord.Embed(
@@ -524,6 +543,7 @@ class Roulette(commands.Cog):
         won = result in numbers
 
         # Calculate payout
+        user_id = interaction.user.id
         if won:
             payout = bet * multiplier
             add_coins(interaction.guild.id, interaction.user.id, payout, source="roulette_win")
@@ -531,10 +551,27 @@ class Roulette(commands.Cog):
             record_gamble(interaction.guild.id, interaction.user.id, bet, True, profit)
             result_color = discord.Color.green()
             result_text = f"**YOU WIN!** +{profit:,} coins"
+
+            # Track achievements
+            try:
+                update_user_stat(user_id, "gambling_winnings", increment=profit)
+                stats = get_user_stats(user_id)
+                current_streak = stats.get("current_win_streak", 0) + 1
+                update_user_stat(user_id, "current_win_streak", value=current_streak)
+                update_user_stat(user_id, "max_win_streak", value=current_streak)
+                check_and_complete_achievements(user_id)
+            except:
+                pass
         else:
             record_gamble(interaction.guild.id, interaction.user.id, bet, False)
             result_color = discord.Color.red()
             result_text = f"**You lose!** -{bet:,} coins"
+
+            # Reset win streak
+            try:
+                update_user_stat(user_id, "current_win_streak", value=0)
+            except:
+                pass
 
         # Result embed
         result_embed = discord.Embed(

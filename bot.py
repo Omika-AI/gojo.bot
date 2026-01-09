@@ -13,6 +13,8 @@ from pathlib import Path
 
 import config
 from utils.logger import logger, log_startup, log_shutdown, log_error
+from utils.achievements_data import update_user_stat, check_and_complete_achievements
+import time
 
 # Create the bot instance with required intents
 # Intents control what events the bot can receive from Discord
@@ -26,6 +28,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Remove default help command so we can use our own
 bot.remove_command("help")
+
+# Track when users join voice channels (for voice_time achievement)
+voice_join_times: dict[int, float] = {}
 
 
 @bot.event
@@ -64,6 +69,59 @@ async def on_guild_remove(guild: discord.Guild):
 async def on_command_error(ctx, error):
     """Global error handler for text commands"""
     log_error(error, f"Command error in {ctx.command}")
+
+
+@bot.event
+async def on_message(message: discord.Message):
+    """Track messages sent for achievements"""
+    # Ignore bot messages
+    if message.author.bot:
+        return
+
+    # Only track in guilds (not DMs)
+    if message.guild:
+        try:
+            # Increment message count
+            update_user_stat(message.author.id, "messages_sent", increment=1)
+            # Check for newly completed achievements
+            check_and_complete_achievements(message.author.id)
+        except Exception as e:
+            logger.error(f"Error tracking message for achievements: {e}")
+
+    # Process commands (important for prefix commands to work)
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    """Track voice channel time for achievements"""
+    # Ignore bots
+    if member.bot:
+        return
+
+    try:
+        # User joined a voice channel
+        if before.channel is None and after.channel is not None:
+            voice_join_times[member.id] = time.time()
+            logger.debug(f"{member.name} joined voice channel {after.channel.name}")
+
+        # User left a voice channel
+        elif before.channel is not None and after.channel is None:
+            if member.id in voice_join_times:
+                join_time = voice_join_times.pop(member.id)
+                time_spent = int(time.time() - join_time)
+                if time_spent > 0:
+                    update_user_stat(member.id, "voice_time", increment=time_spent)
+                    check_and_complete_achievements(member.id)
+                    logger.debug(f"{member.name} spent {time_spent}s in voice")
+
+        # User switched channels (still in voice, just moved)
+        elif before.channel is not None and after.channel is not None and before.channel != after.channel:
+            # Keep tracking, they're still in voice
+            pass
+
+    except Exception as e:
+        logger.error(f"Error tracking voice time: {e}")
 
 
 async def load_commands():

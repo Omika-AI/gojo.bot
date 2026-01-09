@@ -19,6 +19,7 @@ import asyncio
 import config
 from utils.logger import log_command, logger
 from utils.economy_db import get_balance, add_coins, remove_coins, record_gamble
+from utils.achievements_data import update_user_stat, check_and_complete_achievements, get_user_stats
 
 
 class CoinflipChallengeView(View):
@@ -192,6 +193,23 @@ class CoinflipChoiceView(View):
         record_gamble(self.guild_id, winner.id, self.bet, True, self.bet)
         record_gamble(self.guild_id, loser.id, self.bet, False)
 
+        # Track achievements for winner
+        try:
+            update_user_stat(winner.id, "gambling_winnings", increment=self.bet)
+            stats = get_user_stats(winner.id)
+            current_streak = stats.get("current_win_streak", 0) + 1
+            update_user_stat(winner.id, "current_win_streak", value=current_streak)
+            update_user_stat(winner.id, "max_win_streak", value=current_streak)
+            check_and_complete_achievements(winner.id)
+        except:
+            pass
+
+        # Reset loser's streak
+        try:
+            update_user_stat(loser.id, "current_win_streak", value=0)
+        except:
+            pass
+
         # Result embed
         result_emoji = "🪙" if result == "heads" else "🪙"
         result_embed = discord.Embed(
@@ -258,6 +276,23 @@ class CoinflipChoiceView(View):
             # Record gambling stats
             record_gamble(self.guild_id, winner.id, self.bet, True, self.bet)
             record_gamble(self.guild_id, loser.id, self.bet, False)
+
+            # Track achievements for winner
+            try:
+                update_user_stat(winner.id, "gambling_winnings", increment=self.bet)
+                stats = get_user_stats(winner.id)
+                current_streak = stats.get("current_win_streak", 0) + 1
+                update_user_stat(winner.id, "current_win_streak", value=current_streak)
+                update_user_stat(winner.id, "max_win_streak", value=current_streak)
+                check_and_complete_achievements(winner.id)
+            except:
+                pass
+
+            # Reset loser's streak
+            try:
+                update_user_stat(loser.id, "current_win_streak", value=0)
+            except:
+                pass
 
             result_embed = discord.Embed(
                 title="Coinflip Duel - Result",

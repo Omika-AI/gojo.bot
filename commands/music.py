@@ -30,6 +30,7 @@ from datetime import timedelta
 
 import config
 from utils.logger import log_command, logger
+from utils.achievements_data import update_user_stat, check_and_complete_achievements
 from utils.audio_optimization import (
     get_ytdl_options,
     get_ytdl_playlist_options,
@@ -1150,6 +1151,13 @@ class MusicPlayer:
 
             # Mark loading complete before playing
             self._loading = False
+
+            # Track songs_played achievement for the requester
+            try:
+                update_user_stat(self.current.requester.id, "songs_played", increment=1)
+                check_and_complete_achievements(self.current.requester.id)
+            except Exception as e:
+                logger.debug(f"Failed to track songs_played: {e}")
 
             # Send now playing message
             await self._send_now_playing(self.current)
