@@ -323,52 +323,6 @@ class TicketControlView(View):
         )
         logger.info(f"Ticket #{interaction.channel.name} unlocked by {interaction.user}")
 
-    @discord.ui.button(
-        label="Transcript",
-        style=discord.ButtonStyle.success,
-        custom_id="ticket_transcript",
-        emoji="📜"
-    )
-    async def transcript_button(self, interaction: discord.Interaction, button: Button):
-        """Handle the Transcript button click - manual transcript generation."""
-        config = get_guild_config(interaction.guild_id)
-        if not config:
-            await interaction.response.send_message("❌ Ticket system not configured.", ephemeral=True)
-            return
-
-        # Check if user has staff role
-        staff_role_id = int(config["staff_role"])
-        staff_role = interaction.guild.get_role(staff_role_id)
-        if staff_role not in interaction.user.roles:
-            await interaction.response.send_message(
-                "❌ Only staff members can generate transcripts.",
-                ephemeral=True
-            )
-            return
-
-        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
-        if not ticket:
-            await interaction.response.send_message("❌ This is not a ticket channel.", ephemeral=True)
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        # Generate transcript
-        transcript = await generate_transcript(interaction.channel, ticket)
-
-        # Send to the user who requested it
-        file = discord.File(
-            io.BytesIO(transcript.encode()),
-            filename=f"transcript-{format_ticket_number(ticket['ticket_number'])}.txt"
-        )
-
-        await interaction.followup.send(
-            "📜 Here's the transcript for this ticket:",
-            file=file,
-            ephemeral=True
-        )
-        logger.info(f"Manual transcript generated for #{interaction.channel.name} by {interaction.user}")
-
 
 # ==================== CLOSE CONFIRMATION VIEW ====================
 
@@ -627,6 +581,52 @@ class ClosedTicketView(View):
         )
 
         await interaction.response.edit_message(embed=confirm_embed, view=DeleteConfirmView(interaction.user.id))
+
+    @discord.ui.button(
+        label="Transcript",
+        style=discord.ButtonStyle.secondary,
+        custom_id="ticket_transcript_closed",
+        emoji="📜"
+    )
+    async def transcript_button(self, interaction: discord.Interaction, button: Button):
+        """Generate and download transcript of the closed ticket."""
+        config = get_guild_config(interaction.guild_id)
+        if not config:
+            await interaction.response.send_message("❌ Ticket system not configured.", ephemeral=True)
+            return
+
+        # Check if user has staff role
+        staff_role_id = int(config["staff_role"])
+        staff_role = interaction.guild.get_role(staff_role_id)
+        if staff_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only staff members can generate transcripts.",
+                ephemeral=True
+            )
+            return
+
+        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
+        if not ticket:
+            await interaction.response.send_message("❌ Ticket data not found.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Generate transcript
+        transcript = await generate_transcript(interaction.channel, ticket)
+
+        # Send to the user who requested it
+        file = discord.File(
+            io.BytesIO(transcript.encode()),
+            filename=f"transcript-{format_ticket_number(ticket['ticket_number'])}.txt"
+        )
+
+        await interaction.followup.send(
+            "📜 Here's the transcript for this ticket:",
+            file=file,
+            ephemeral=True
+        )
+        logger.info(f"Transcript downloaded for #{interaction.channel.name} by {interaction.user}")
 
 
 # ==================== DELETE CONFIRMATION VIEW ====================
