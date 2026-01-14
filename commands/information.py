@@ -374,6 +374,36 @@ COMMANDS_REGISTRY = [
         "permission": "administrator"
     },
 
+    # Support/Ticket Commands (Require administrator)
+    {
+        "name": "/ticket setup",
+        "description": "Set up the ticket system with staff role and log channel",
+        "usage": "/ticket setup staff_role:@Staff log_channel:#ticket-logs category:Tickets",
+        "category": "support",
+        "permission": "administrator"
+    },
+    {
+        "name": "/ticket panel",
+        "description": "Send a new ticket panel embed with Open Ticket button",
+        "usage": "/ticket panel",
+        "category": "support",
+        "permission": "administrator"
+    },
+    {
+        "name": "/ticket add",
+        "description": "Add a user to the current ticket channel",
+        "usage": "/ticket add user:@someone",
+        "category": "support",
+        "permission": None  # Staff or ticket owner can use
+    },
+    {
+        "name": "/ticket remove",
+        "description": "Remove a user from the current ticket channel",
+        "usage": "/ticket remove user:@someone",
+        "category": "support",
+        "permission": "manage_messages"  # Staff only
+    },
+
     # Owner Commands (Server Owner only)
     {
         "name": "/clearlogs",
@@ -454,6 +484,11 @@ CATEGORY_INFO = {
         "emoji": "🛡️",
         "description": "Tools for server moderators"
     },
+    "support": {
+        "name": "Support Ticket Commands",
+        "emoji": "🎫",
+        "description": "Ticket system for user support"
+    },
     "admin": {
         "name": "Admin Commands",
         "emoji": "👑",
@@ -501,7 +536,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "moderation", "admin", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "moderation", "support", "admin", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -697,6 +732,25 @@ class InformationView(View):
             inline=False
         )
 
+        # Staff-only features below
+        perms = self.user.guild_permissions
+        is_staff = perms.manage_messages or perms.moderate_members or perms.administrator
+
+        # Ticket System (Staff)
+        if is_staff:
+            embed.add_field(
+                name="🎫 Support Ticket System",
+                value=(
+                    "• **Button-Based Tickets** - Users click to open private support channels\n"
+                    "• **Category Selection** - Support, Report, Appeal, or Other\n"
+                    "• **Claim System** - Staff can claim tickets to handle them\n"
+                    "• **Lock/Unlock** - Temporarily prevent user from typing\n"
+                    "• **Transcripts** - Save ticket conversations to log channel\n"
+                    "• **Safe Close** - Close with reopen option, delete confirmation"
+                ),
+                inline=False
+            )
+
         # Coming Soon
         embed.add_field(
             name="🚀 Coming Soon",
@@ -710,8 +764,7 @@ class InformationView(View):
         )
 
         # Note about more features for staff
-        perms = self.user.guild_permissions
-        if perms.manage_messages or perms.moderate_members or perms.administrator:
+        if is_staff:
             embed.add_field(
                 name="🔒 Staff Features",
                 value="*You have access to additional commands. Browse the category pages to see moderation, admin, and owner tools.*",

@@ -133,6 +133,14 @@ class Help(commands.Cog):
                 inline=False
             )
 
+            # Support/Ticket Commands (Admins only)
+            support_cmds = "`/ticket setup` `/ticket panel` `/ticket add` `/ticket remove`"
+            embed.add_field(
+                name="🎫 Support Tickets",
+                value=support_cmds,
+                inline=False
+            )
+
         # Owner Commands (Server Owner only)
         if is_owner:
             owner_cmds = "`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs`"
