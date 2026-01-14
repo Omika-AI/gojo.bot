@@ -60,6 +60,13 @@ COMMANDS_REGISTRY = [
         "category": "fun",
         "permission": None
     },
+    {
+        "name": "/67",
+        "description": "Unleash maximum cringe upon the server",
+        "usage": "/67",
+        "category": "fun",
+        "permission": None
+    },
 
     # Economy Commands (Everyone can use)
     {

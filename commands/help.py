@@ -68,7 +68,7 @@ class Help(commands.Cog):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
         # General Commands (Everyone)
-        general_cmds = "`/help` `/ping` `/information` `/dq`"
+        general_cmds = "`/help` `/ping` `/information` `/dq` `/67`"
         embed.add_field(
             name="📌 General",
             value=general_cmds,
