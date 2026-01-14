@@ -71,6 +71,24 @@ async def on_command_error(ctx, error):
     log_error(error, f"Command error in {ctx.command}")
 
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Global error handler for slash commands"""
+    # Log the error with full details
+    command_name = interaction.command.name if interaction.command else "Unknown"
+    log_error(error, f"Slash command error in /{command_name}")
+
+    # Try to respond to the user
+    error_msg = f"An error occurred: {str(error)}"
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(error_msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(error_msg, ephemeral=True)
+    except Exception:
+        pass  # Can't respond, just log it
+
+
 @bot.event
 async def on_message(message: discord.Message):
     """Track messages sent for achievements"""

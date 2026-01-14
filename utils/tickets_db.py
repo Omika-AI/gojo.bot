@@ -133,9 +133,53 @@ def get_ticket(guild_id: int, channel_id: int) -> Optional[Dict[str, Any]]:
     return data[guild_str]["active_tickets"].get(channel_str)
 
 
-def close_ticket(guild_id: int, channel_id: int) -> Optional[Dict[str, Any]]:
+def close_ticket(guild_id: int, channel_id: int) -> bool:
     """
-    Remove a ticket from active tickets.
+    Mark a ticket as closed (but don't delete it).
+    Returns True if successful, False if ticket not found.
+    """
+    data = load_tickets()
+    guild_str = str(guild_id)
+    channel_str = str(channel_id)
+
+    if guild_str not in data:
+        return False
+
+    if channel_str not in data[guild_str]["active_tickets"]:
+        return False
+
+    data[guild_str]["active_tickets"][channel_str]["closed"] = True
+    data[guild_str]["active_tickets"][channel_str]["closed_at"] = datetime.utcnow().isoformat()
+
+    save_tickets(data)
+    return True
+
+
+def reopen_ticket(guild_id: int, channel_id: int) -> bool:
+    """
+    Reopen a closed ticket.
+    Returns True if successful, False if ticket not found.
+    """
+    data = load_tickets()
+    guild_str = str(guild_id)
+    channel_str = str(channel_id)
+
+    if guild_str not in data:
+        return False
+
+    if channel_str not in data[guild_str]["active_tickets"]:
+        return False
+
+    data[guild_str]["active_tickets"][channel_str]["closed"] = False
+    data[guild_str]["active_tickets"][channel_str]["closed_at"] = None
+
+    save_tickets(data)
+    return True
+
+
+def delete_ticket(guild_id: int, channel_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Permanently remove a ticket from active tickets.
     Returns the ticket data before deletion, or None if not found.
     """
     data = load_tickets()

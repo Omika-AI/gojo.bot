@@ -18,6 +18,8 @@ from utils.tickets_db import (
     create_ticket,
     get_ticket,
     close_ticket,
+    reopen_ticket,
+    delete_ticket,
     claim_ticket,
     lock_ticket,
     unlock_ticket,
@@ -476,22 +478,37 @@ class CloseConfirmView(View):
                 # User has DMs disabled
                 pass
 
-        # Remove ticket from database
+        # Mark ticket as closed in database (but don't delete)
         close_ticket(interaction.guild_id, interaction.channel_id)
 
-        # Countdown and delete channel
-        await interaction.channel.send(
-            embed=discord.Embed(
-                title="🗑️ Channel Deleting...",
-                description="This channel will be deleted in 5 seconds.",
-                color=COLOR_RED
+        # Lock the channel - remove everyone's send permission except staff
+        staff_role = interaction.guild.get_role(int(config["staff_role"]))
+        if ticket_owner:
+            await interaction.channel.set_permissions(
+                ticket_owner,
+                view_channel=True,
+                send_messages=False,
+                read_message_history=True
             )
-        )
 
         logger.info(f"Ticket #{ticket_number} closed by {interaction.user} in {interaction.guild.name}")
 
-        await asyncio.sleep(5)
-        await interaction.channel.delete(reason=f"Ticket #{ticket_number} closed")
+        # Send closed message with reopen/delete buttons
+        closed_embed = discord.Embed(
+            title="🔒 Ticket Closed",
+            description=(
+                "This ticket has been closed. The transcript has been saved.\n\n"
+                "**Options:**\n"
+                "• Click **Open Again** to reopen this ticket\n"
+                "• Click **Delete** to permanently delete this channel"
+            ),
+            color=COLOR_RED,
+            timestamp=closed_at
+        )
+        closed_embed.add_field(name="Closed By", value=interaction.user.mention, inline=True)
+        closed_embed.add_field(name="Duration", value=duration_str, inline=True)
+
+        await interaction.channel.send(embed=closed_embed, view=ClosedTicketView())
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
     async def cancel_close(self, interaction: discord.Interaction, button: Button):
@@ -504,6 +521,172 @@ class CloseConfirmView(View):
             ),
             view=None
         )
+
+
+# ==================== CLOSED TICKET VIEW ====================
+
+class ClosedTicketView(View):
+    """View with Open Again and Delete buttons for closed tickets."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Open Again",
+        style=discord.ButtonStyle.success,
+        custom_id="ticket_reopen",
+        emoji="🔓"
+    )
+    async def reopen_button(self, interaction: discord.Interaction, button: Button):
+        """Reopen the closed ticket."""
+        config = get_guild_config(interaction.guild_id)
+        if not config:
+            await interaction.response.send_message("❌ Ticket system not configured.", ephemeral=True)
+            return
+
+        # Check if user has staff role
+        staff_role_id = int(config["staff_role"])
+        staff_role = interaction.guild.get_role(staff_role_id)
+        if staff_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only staff members can reopen tickets.",
+                ephemeral=True
+            )
+            return
+
+        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
+        if not ticket:
+            await interaction.response.send_message("❌ Ticket data not found.", ephemeral=True)
+            return
+
+        # Reopen the ticket in database
+        reopen_ticket(interaction.guild_id, interaction.channel_id)
+
+        # Restore user permissions
+        ticket_owner = interaction.guild.get_member(int(ticket["user_id"]))
+        if ticket_owner:
+            await interaction.channel.set_permissions(
+                ticket_owner,
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                attach_files=True
+            )
+
+        ticket_number = format_ticket_number(ticket["ticket_number"])
+
+        # Update the message
+        reopen_embed = discord.Embed(
+            title="🔓 Ticket Reopened",
+            description=f"This ticket has been reopened by {interaction.user.mention}.",
+            color=COLOR_GREEN,
+            timestamp=datetime.utcnow()
+        )
+
+        await interaction.response.edit_message(embed=reopen_embed, view=None)
+
+        # Send notification
+        await interaction.channel.send(
+            f"📬 {ticket_owner.mention if ticket_owner else 'User'}, your ticket has been reopened!",
+            view=TicketControlView()
+        )
+
+        logger.info(f"Ticket #{ticket_number} reopened by {interaction.user} in {interaction.guild.name}")
+
+    @discord.ui.button(
+        label="Delete",
+        style=discord.ButtonStyle.danger,
+        custom_id="ticket_delete",
+        emoji="🗑️"
+    )
+    async def delete_button(self, interaction: discord.Interaction, button: Button):
+        """Show delete confirmation."""
+        config = get_guild_config(interaction.guild_id)
+        if not config:
+            await interaction.response.send_message("❌ Ticket system not configured.", ephemeral=True)
+            return
+
+        # Check if user has staff role
+        staff_role_id = int(config["staff_role"])
+        staff_role = interaction.guild.get_role(staff_role_id)
+        if staff_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only staff members can delete tickets.",
+                ephemeral=True
+            )
+            return
+
+        # Show delete confirmation
+        confirm_embed = discord.Embed(
+            title="⚠️ Delete Ticket?",
+            description=(
+                "Are you sure you want to **permanently delete** this ticket channel?\n\n"
+                "**This action cannot be undone!**"
+            ),
+            color=COLOR_RED
+        )
+
+        await interaction.response.edit_message(embed=confirm_embed, view=DeleteConfirmView(interaction.user.id))
+
+
+# ==================== DELETE CONFIRMATION VIEW ====================
+
+class DeleteConfirmView(View):
+    """Final confirmation view for deleting a ticket."""
+
+    def __init__(self, user_id: int):
+        super().__init__(timeout=30)
+        self.user_id = user_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only allow the original user to confirm."""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "❌ Only the person who initiated the delete can confirm.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Yes, Delete Forever", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def confirm_delete(self, interaction: discord.Interaction, button: Button):
+        """Confirm deleting the ticket."""
+        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
+        ticket_number = format_ticket_number(ticket["ticket_number"]) if ticket else "Unknown"
+
+        # Remove from database
+        delete_ticket(interaction.guild_id, interaction.channel_id)
+
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="🗑️ Deleting Channel...",
+                description="This channel will be deleted in 3 seconds.",
+                color=COLOR_RED
+            ),
+            view=None
+        )
+
+        logger.info(f"Ticket #{ticket_number} deleted by {interaction.user} in {interaction.guild.name}")
+
+        await asyncio.sleep(3)
+        await interaction.channel.delete(reason=f"Ticket #{ticket_number} deleted by {interaction.user}")
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel_delete(self, interaction: discord.Interaction, button: Button):
+        """Cancel deleting the ticket."""
+        # Go back to the closed ticket view
+        closed_embed = discord.Embed(
+            title="🔒 Ticket Closed",
+            description=(
+                "This ticket has been closed. The transcript has been saved.\n\n"
+                "**Options:**\n"
+                "• Click **Open Again** to reopen this ticket\n"
+                "• Click **Delete** to permanently delete this channel"
+            ),
+            color=COLOR_RED
+        )
+
+        await interaction.response.edit_message(embed=closed_embed, view=ClosedTicketView())
 
 
 # ==================== HELPER FUNCTIONS ====================
@@ -710,6 +893,7 @@ class Ticket(commands.Cog):
         """Called when the cog is loaded."""
         self.bot.add_view(TicketPanelView())
         self.bot.add_view(TicketControlView())
+        self.bot.add_view(ClosedTicketView())
 
     # Command group for ticket commands
     ticket_group = app_commands.Group(name="ticket", description="Ticket system commands")
@@ -729,7 +913,7 @@ class Ticket(commands.Cog):
         category: discord.CategoryChannel = None
     ):
         """Set up the ticket system and send the ticket panel."""
-        log_command(interaction, "ticket setup")
+        log_command(interaction.user.name, interaction.user.id, "ticket setup", interaction.guild.name)
 
         # Save configuration
         set_guild_config(
@@ -775,7 +959,7 @@ class Ticket(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     async def ticket_panel(self, interaction: discord.Interaction):
         """Send a new ticket panel embed."""
-        log_command(interaction, "ticket panel")
+        log_command(interaction.user.name, interaction.user.id, "ticket panel", interaction.guild.name)
 
         config = get_guild_config(interaction.guild_id)
         if not config:
@@ -808,7 +992,7 @@ class Ticket(commands.Cog):
     @app_commands.describe(user="The user to add to this ticket")
     async def ticket_add(self, interaction: discord.Interaction, user: discord.Member):
         """Add a user to the current ticket channel."""
-        log_command(interaction, "ticket add")
+        log_command(interaction.user.name, interaction.user.id, "ticket add", interaction.guild.name)
 
         ticket = get_ticket(interaction.guild_id, interaction.channel_id)
         if not ticket:
@@ -849,7 +1033,7 @@ class Ticket(commands.Cog):
     @app_commands.describe(user="The user to remove from this ticket")
     async def ticket_remove(self, interaction: discord.Interaction, user: discord.Member):
         """Remove a user from the current ticket channel."""
-        log_command(interaction, "ticket remove")
+        log_command(interaction.user.name, interaction.user.id, "ticket remove", interaction.guild.name)
 
         ticket = get_ticket(interaction.guild_id, interaction.channel_id)
         if not ticket:
