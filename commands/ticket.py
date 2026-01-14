@@ -589,7 +589,7 @@ class ClosedTicketView(View):
         emoji="📜"
     )
     async def transcript_button(self, interaction: discord.Interaction, button: Button):
-        """Generate and download transcript of the closed ticket."""
+        """Generate and send transcript to the log channel."""
         config = get_guild_config(interaction.guild_id)
         if not config:
             await interaction.response.send_message("❌ Ticket system not configured.", ephemeral=True)
@@ -600,7 +600,7 @@ class ClosedTicketView(View):
         staff_role = interaction.guild.get_role(staff_role_id)
         if staff_role not in interaction.user.roles:
             await interaction.response.send_message(
-                "❌ Only staff members can generate transcripts.",
+                "❌ Only staff members can save transcripts.",
                 ephemeral=True
             )
             return
@@ -610,23 +610,48 @@ class ClosedTicketView(View):
             await interaction.response.send_message("❌ Ticket data not found.", ephemeral=True)
             return
 
+        # Check if log channel is configured
+        if not config.get("log_channel"):
+            await interaction.response.send_message("❌ No log channel configured.", ephemeral=True)
+            return
+
+        log_channel = interaction.guild.get_channel(int(config["log_channel"]))
+        if not log_channel:
+            await interaction.response.send_message("❌ Log channel not found.", ephemeral=True)
+            return
+
         await interaction.response.defer(ephemeral=True)
 
         # Generate transcript
         transcript = await generate_transcript(interaction.channel, ticket)
+        ticket_number = format_ticket_number(ticket["ticket_number"])
 
-        # Send to the user who requested it
+        # Get ticket owner
+        ticket_owner = interaction.guild.get_member(int(ticket["user_id"]))
+
+        # Create embed for log channel
+        log_embed = discord.Embed(
+            title=f"📜 Transcript Saved - Ticket #{ticket_number}",
+            color=COLOR_BLUE,
+            timestamp=datetime.utcnow()
+        )
+        log_embed.add_field(name="Opened By", value=ticket_owner.mention if ticket_owner else "Unknown", inline=True)
+        log_embed.add_field(name="Category", value=ticket["category"].title(), inline=True)
+        log_embed.add_field(name="Saved By", value=interaction.user.mention, inline=True)
+
+        # Send transcript to log channel
         file = discord.File(
             io.BytesIO(transcript.encode()),
-            filename=f"transcript-{format_ticket_number(ticket['ticket_number'])}.txt"
+            filename=f"transcript-{ticket_number}.txt"
         )
+        await log_channel.send(embed=log_embed, file=file)
 
+        # Confirm to staff
         await interaction.followup.send(
-            "📜 Here's the transcript for this ticket:",
-            file=file,
+            f"✅ Transcript saved to {log_channel.mention}",
             ephemeral=True
         )
-        logger.info(f"Transcript downloaded for #{interaction.channel.name} by {interaction.user}")
+        logger.info(f"Transcript saved for #{interaction.channel.name} by {interaction.user}")
 
 
 # ==================== DELETE CONFIRMATION VIEW ====================
