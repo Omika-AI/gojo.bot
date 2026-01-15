@@ -91,6 +91,14 @@ KARAOKE_SONGS: Dict[str, KaraokeSong] = {
         duration=187,  # 3:07
         lyrics_file="something_blue.lrc"
     ),
+    "youre_welcome": KaraokeSong(
+        id="youre_welcome",
+        title="You're Welcome",
+        artist="Dwayne Johnson (Maui) - Moana",
+        soundcloud_url="https://soundcloud.com/fun-kids-100189584/sets/your-welcome-moana",
+        duration=169,  # 2:49
+        lyrics_file="youre_welcome.lrc"
+    ),
 }
 
 
