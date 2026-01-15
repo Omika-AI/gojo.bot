@@ -703,12 +703,8 @@ class ModerationPanelView(View):
 
     @discord.ui.button(label="❌ Close Panel", style=discord.ButtonStyle.secondary, row=2)
     async def close_button(self, interaction: discord.Interaction, button: Button):
-        """Close the moderation panel"""
-        await interaction.response.edit_message(
-            content="🛡️ Moderation panel closed.",
-            embed=None,
-            view=None
-        )
+        """Close the moderation panel by deleting the message"""
+        await interaction.message.delete()
         self.stop()
 
     async def on_timeout(self):
