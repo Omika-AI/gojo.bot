@@ -265,26 +265,43 @@ class SendCoinsModal(Modal):
                 )
                 return
 
-            # Transfer coins
-            success, message = transfer_coins(0, self.sender.id, recipient.id, amount)
+            # Calculate 15% tax
+            TAX_RATE = 0.15
+            GOJO_BOT_ID = 1401198658581692587  # Gojo's bot account for collecting taxes
+
+            tax_amount = int(amount * TAX_RATE)
+            amount_after_tax = amount - tax_amount
+
+            # Remove full amount from sender
+            success, _ = remove_coins(0, self.sender.id, amount)
 
             if success:
+                # Add taxed amount to recipient
+                add_coins(0, recipient.id, amount_after_tax, source=f"transfer_from_{self.sender.id}")
+
+                # Add tax to Gojo's balance
+                add_coins(0, GOJO_BOT_ID, tax_amount, source="transfer_tax")
+
                 new_sender_balance = get_balance(0, self.sender.id)
                 new_recipient_balance = get_balance(0, recipient.id)
+                gojo_balance = get_balance(0, GOJO_BOT_ID)
 
                 embed = discord.Embed(
                     title="Coins Sent!",
-                    description=f"Successfully sent **{amount:,}** coins to {recipient.mention}",
+                    description=f"Successfully sent coins to {recipient.mention}",
                     color=discord.Color.green()
                 )
+                embed.add_field(name="Amount Sent", value=f"**{amount:,}** coins", inline=True)
+                embed.add_field(name="Tax (15%)", value=f"**-{tax_amount:,}** coins", inline=True)
+                embed.add_field(name="Received", value=f"**{amount_after_tax:,}** coins", inline=True)
                 embed.add_field(name="Your New Balance", value=f"**{new_sender_balance:,}** coins", inline=True)
                 embed.add_field(name=f"{recipient.display_name}'s Balance", value=f"**{new_recipient_balance:,}** coins", inline=True)
-                embed.set_footer(text=f"Sent by {self.sender.display_name}")
+                embed.set_footer(text=f"Sent by {self.sender.display_name} | Tax collected by Gojo")
 
                 await interaction.response.send_message(embed=embed)
             else:
                 await interaction.response.send_message(
-                    f"Transfer failed: {message}",
+                    "Transfer failed: Insufficient balance",
                     ephemeral=True
                 )
 
