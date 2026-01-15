@@ -94,7 +94,7 @@ class Help(commands.Cog):
         # Economy & Gambling + Vault
         embed.add_field(
             name="💰 Economy & Gambling",
-            value="`/balance` `/claimdaily` `/leaderboard` `/bj` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`",
+            value="`/balance` `/claimdaily` `/leaderboard` `/blackjack` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`",
             inline=False
         )
 
@@ -112,17 +112,17 @@ class Help(commands.Cog):
             inline=False
         )
 
-        # Leveling & Achievements + Milestones
+        # Leveling & Milestones
         embed.add_field(
             name="📊 Leveling & Milestones",
-            value="`/rank` `/xpleaderboard` `/levels` `/achievements` `/achievementstats` `/rep` `/repleaderboard` `/milestones` `/serverhistory`",
+            value="`/xpleaderboard` `/levels` `/rep` `/repleaderboard` `/milestones` `/serverhistory`",
             inline=False
         )
 
         # Music & Karaoke
         embed.add_field(
             name="🎵 Music & Karaoke",
-            value="`/play` `/playlist` `/queue` `/nowplaying` `/pause` `/skip` `/stop` `/volume` `/shuffle` | `/karaoke` `/karaokelist`",
+            value="`/play` `/playlist` `/queue` `/nowplaying` `/pause` `/skip` `/stop` `/volume` `/shuffle` | `/karaoke`",
             inline=False
         )
 
@@ -138,7 +138,7 @@ class Help(commands.Cog):
         if is_mod or is_admin:
             embed.add_field(
                 name="🛡️ Moderation",
-                value="`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`",
+                value="`/moderationpanel` `/moderationdatabase` `/modtalk` `/clearqueue`",
                 inline=False
             )
 
@@ -192,7 +192,7 @@ class Help(commands.Cog):
         if is_owner:
             embed.add_field(
                 name="🔐 Owner (Logs & System)",
-                value="`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs` `/clearmessages` | `/system health` `/system errors` `/system servers`",
+                value="`/setuplogs` `/editlogs` `/clearlogs` `/clearmessages` | `/system health` `/system errors` `/system servers`",
                 inline=False
             )
 

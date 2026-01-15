@@ -241,9 +241,9 @@ COMMANDS_REGISTRY = [
 
     # Gambling Commands (Everyone can use)
     {
-        "name": "/bj",
-        "description": "Play blackjack against the dealer (1x-1.5x payout)",
-        "usage": "/bj bet:100",
+        "name": "/blackjack",
+        "description": "Play blackjack against the dealer with Hit/Stand/Double buttons. Includes 'How to Play' guide (1x-1.5x payout)",
+        "usage": "/blackjack bet:100",
         "category": "gambling",
         "permission": None
     },
@@ -376,58 +376,15 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
     {
-        "name": "/karaokelist",
-        "description": "View all available karaoke songs",
-        "usage": "/karaokelist",
-        "category": "karaoke",
-        "permission": None
-    },
-    {
-        "name": "/karaokesolo",
-        "description": "Start a solo karaoke performance with spotlight and countdown",
-        "usage": "/karaokesolo singer:@user",
-        "category": "karaoke",
-        "permission": None
-    },
-    {
-        "name": "/karaokeduet",
-        "description": "Start a duet with two singers taking alternating lines",
-        "usage": "/karaokeduet singer1:@user1 singer2:@user2",
-        "category": "karaoke",
-        "permission": None
-    },
-    {
         "name": "/karaoke",
-        "description": "Shows karaoke mode options (redirects to solo/duet)",
+        "description": "Start a karaoke session. Choose Solo or Duet mode via buttons, then select your song!",
         "usage": "/karaoke",
         "category": "karaoke",
         "permission": None
     },
 
-    # Achievement Commands (Everyone can use)
-    {
-        "name": "/achievements",
-        "description": "View your unlocked achievements and progress",
-        "usage": "/achievements or /achievements @user",
-        "category": "achievements",
-        "permission": None
-    },
-    {
-        "name": "/achievementstats",
-        "description": "View detailed progress toward all achievements with progress bars",
-        "usage": "/achievementstats or /achievementstats user:@someone",
-        "category": "achievements",
-        "permission": None
-    },
-
     # Leveling Commands (Everyone can use)
-    {
-        "name": "/rank",
-        "description": "View your level and XP with a beautiful graphical rank card",
-        "usage": "/rank or /rank @user",
-        "category": "leveling",
-        "permission": None
-    },
+    # Note: /rank and /achievements are shown in /profile
     {
         "name": "/xpleaderboard",
         "description": "View the server's XP leaderboard sorted by total XP",
@@ -565,20 +522,6 @@ COMMANDS_REGISTRY = [
         "permission": "moderate_members"
     },
     {
-        "name": "/timeout",
-        "description": "Temporarily mute a user for a specified time",
-        "usage": "/timeout @user 10 Being disruptive",
-        "category": "moderation",
-        "permission": "moderate_members"
-    },
-    {
-        "name": "/warning",
-        "description": "Issue a warning to a user (Minor/Medium/Serious)",
-        "usage": "/warning @user Medium Breaking rules",
-        "category": "moderation",
-        "permission": "manage_messages"
-    },
-    {
         "name": "/modtalk",
         "description": "Send a message as the bot in any channel",
         "usage": "/modtalk",
@@ -586,30 +529,9 @@ COMMANDS_REGISTRY = [
         "permission": "manage_messages"
     },
     {
-        "name": "/moderationlogs",
-        "description": "View all moderation actions with filters",
-        "usage": "/moderationlogs or /moderationlogs @user",
-        "category": "moderation",
-        "permission": "manage_messages"
-    },
-    {
-        "name": "/modstats",
-        "description": "View moderation statistics and top moderators",
-        "usage": "/modstats",
-        "category": "moderation",
-        "permission": "manage_messages"
-    },
-    {
-        "name": "/userhistory",
-        "description": "View a user's moderation history",
-        "usage": "/userhistory @user",
-        "category": "moderation",
-        "permission": "manage_messages"
-    },
-    {
-        "name": "/modactivity",
-        "description": "View a moderator's action history",
-        "usage": "/modactivity or /modactivity @moderator",
+        "name": "/moderationdatabase",
+        "description": "Access all moderation tools in one place (Mod Logs, Stats, User History, Mod Activity, Search, Event Stats)",
+        "usage": "/moderationdatabase",
         "category": "moderation",
         "permission": "manage_messages"
     },
@@ -624,15 +546,8 @@ COMMANDS_REGISTRY = [
     },
     {
         "name": "/webhook",
-        "description": "Create and send webhook messages with embeds",
+        "description": "Create or edit webhook messages with embeds (button menu for Create/Edit options)",
         "usage": "/webhook",
-        "category": "admin",
-        "permission": "administrator"
-    },
-    {
-        "name": "/webhookedit",
-        "description": "Edit an existing webhook message",
-        "usage": "/webhookedit <message_link>",
         "category": "admin",
         "permission": "administrator"
     },
@@ -777,24 +692,10 @@ COMMANDS_REGISTRY = [
     },
     {
         "name": "/ticket panel",
-        "description": "Send a new ticket panel embed with Open Ticket button",
+        "description": "Send a new ticket panel embed with Open Ticket button (Add/Remove users via buttons in tickets)",
         "usage": "/ticket panel",
         "category": "support",
         "permission": "administrator"
-    },
-    {
-        "name": "/ticket add",
-        "description": "Add a user to the current ticket channel",
-        "usage": "/ticket add user:@someone",
-        "category": "support",
-        "permission": None  # Staff or ticket owner can use
-    },
-    {
-        "name": "/ticket remove",
-        "description": "Remove a user from the current ticket channel",
-        "usage": "/ticket remove user:@someone",
-        "category": "support",
-        "permission": "manage_messages"  # Staff only
     },
 
     # Giveaway Commands (Require manage_guild)
@@ -1133,20 +1034,6 @@ COMMANDS_REGISTRY = [
         "name": "/editlogs",
         "description": "Change the event logging channel (Server Owner only)",
         "usage": "/editlogs #new-log-channel",
-        "category": "owner",
-        "permission": "administrator"
-    },
-    {
-        "name": "/searchlogs",
-        "description": "Search event logs with text, user, or category filters (Server Owner only)",
-        "usage": "/searchlogs search_text:badword OR /searchlogs user:@someone category:messages",
-        "category": "owner",
-        "permission": "administrator"
-    },
-    {
-        "name": "/logstats",
-        "description": "View event logging statistics (Server Owner only)",
-        "usage": "/logstats",
         "category": "owner",
         "permission": "administrator"
     },
