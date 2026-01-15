@@ -3,10 +3,10 @@ Guess the Number Command
 High-risk, high-reward gambling game
 
 Rules:
-- Guess a number between 1-50
+- Guess a number between 1-500
 - If correct: 500x payout!
 - If wrong: Lose your bet
-- 2% chance of winning (1/50)
+- 0.2% chance of winning (1/500)
 """
 
 import discord
@@ -23,7 +23,7 @@ from utils.achievements_data import update_user_stat, check_and_complete_achieve
 
 # Game configuration
 MIN_NUMBER = 1
-MAX_NUMBER = 50
+MAX_NUMBER = 500
 MULTIPLIER = 500  # 500x payout for correct guess
 
 
@@ -33,10 +33,10 @@ class GuessNumber(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="guessnumber", description="Guess 1-50 for 500x payout! High risk, high reward!")
+    @app_commands.command(name="guessnumber", description="Guess 1-500 for 500x payout! High risk, high reward!")
     @app_commands.describe(
         bet="Amount of coins to bet",
-        guess="Your guess (1-50)"
+        guess="Your guess (1-500)"
     )
     async def guessnumber(
         self,
@@ -85,14 +85,14 @@ class GuessNumber(commands.Cog):
         # Initial embed - suspense
         embed = discord.Embed(
             title="Guess the Number",
-            description=f"You guessed **{guess}**...\n\nGenerating random number between 1-50...",
+            description=f"You guessed **{guess}**...\n\nGenerating random number between 1-500...",
             color=discord.Color.gold()
         )
         embed.add_field(name="Your Bet", value=f"**{bet:,}** coins", inline=True)
         embed.add_field(name="Potential Win", value=f"**{bet * MULTIPLIER:,}** coins", inline=True)
         embed.add_field(
             name="Odds",
-            value=f"1 in {MAX_NUMBER} chance (2%)",
+            value=f"1 in {MAX_NUMBER} chance (0.2%)",
             inline=True
         )
         embed.set_footer(text=f"Player: {interaction.user.display_name}")
@@ -176,7 +176,7 @@ class GuessNumber(commands.Cog):
             result_embed.add_field(name="New Balance", value=f"**{new_balance:,}** coins", inline=True)
 
             # Encouragement
-            result_embed.set_footer(text="The odds are 1 in 50... Keep trying!")
+            result_embed.set_footer(text="The odds are 1 in 500... Keep trying!")
 
         await interaction.edit_original_response(embed=result_embed)
 
