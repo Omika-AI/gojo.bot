@@ -84,10 +84,17 @@ class Help(commands.Cog):
             inline=False
         )
 
-        # Profile & Reminders
+        # Profile & Customization
         embed.add_field(
-            name="🎨 Profile & Reminders",
-            value="`/profile` `/profilecolor` `/profilepresets` `/remind` `/reminders`",
+            name="🎨 Profile & Customization",
+            value="`/profile` `/profilecard` `/profilecolor` `/profilepresets` `/profilemotto` `/profilebanner` `/profilebadges` `/profilefeature`",
+            inline=False
+        )
+
+        # Reminders
+        embed.add_field(
+            name="⏰ Reminders",
+            value="`/remind` `/reminders`",
             inline=False
         )
 
@@ -95,6 +102,13 @@ class Help(commands.Cog):
         embed.add_field(
             name="💰 Economy & Gambling",
             value="`/balance` `/claimdaily` `/leaderboard` `/blackjack` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`",
+            inline=False
+        )
+
+        # Vault (Shared Economy)
+        embed.add_field(
+            name="🏦 Vault",
+            value="`/vault create` `/vault deposit` `/vault withdraw` `/vault info` `/vault join` `/vault leave` `/vault list` `/vault goal` `/vault members`",
             inline=False
         )
 
@@ -201,12 +215,39 @@ class Help(commands.Cog):
                 inline=False
             )
 
+            # Starboard & Auto-Thread
+            embed.add_field(
+                name="⭐ Starboard & Threads",
+                value="`/starboard setup` `/starboard threshold` `/starboard stats` | `/autothread setup` `/autothread disable` `/autothread list`",
+                inline=False
+            )
+
+            # Server Config & Reports
+            embed.add_field(
+                name="⚙️ Server Config & Reports",
+                value="`/serverconfig view` `/serverconfig toggle` `/serverconfig reset` | `/serverreports setup` `/serverreports now`",
+                inline=False
+            )
+
+            # Milestones & Anti-Scam
+            embed.add_field(
+                name="🏆 Milestones & Security",
+                value="`/milestones` `/serverhistory` | `/antiscam enable` `/antiscam settings` `/antiscam whitelist`",
+                inline=False
+            )
+
         # ==================== OWNER COMMANDS ====================
 
         if is_owner:
             embed.add_field(
-                name="🔐 Owner",
+                name="🔐 Logs",
                 value="`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs`",
+                inline=False
+            )
+
+            embed.add_field(
+                name="🖥️ System",
+                value="`/system health` `/system errors` `/system servers` `/system clear`",
                 inline=False
             )
 

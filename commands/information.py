@@ -1150,6 +1150,311 @@ COMMANDS_REGISTRY = [
         "category": "owner",
         "permission": "administrator"
     },
+
+    # Additional Profile Commands (Everyone can use)
+    {
+        "name": "/profilemotto",
+        "description": "Set your profile motto (short tagline, max 50 chars)",
+        "usage": "/profilemotto motto:Living my best life",
+        "category": "profile",
+        "permission": None
+    },
+    {
+        "name": "/profilebanner",
+        "description": "View, buy, or equip profile banners",
+        "usage": "/profilebanner action:view OR /profilebanner action:buy banner:sunset",
+        "category": "profile",
+        "permission": None
+    },
+    {
+        "name": "/profilebadges",
+        "description": "View your earned profile badges",
+        "usage": "/profilebadges OR /profilebadges user:@someone",
+        "category": "profile",
+        "permission": None
+    },
+    {
+        "name": "/profilefeature",
+        "description": "Choose badges to feature on your profile (up to 3)",
+        "usage": "/profilefeature badges:chatterbox, rich, level_10",
+        "category": "profile",
+        "permission": None
+    },
+    {
+        "name": "/profilecard",
+        "description": "View a text-based profile overview with all customizations",
+        "usage": "/profilecard OR /profilecard user:@someone",
+        "category": "profile",
+        "permission": None
+    },
+
+    # Vault Commands (Everyone can use)
+    {
+        "name": "/vault create",
+        "description": "Create a shared economy vault/club",
+        "usage": "/vault create name:savings description:Our savings vault public:true",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault deposit",
+        "description": "Deposit coins into your vault",
+        "usage": "/vault deposit amount:500",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault withdraw",
+        "description": "Withdraw coins from vault (leader only)",
+        "usage": "/vault withdraw amount:500 reason:Server event prize",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault info",
+        "description": "View vault information and progress",
+        "usage": "/vault info OR /vault info name:myvault",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault join",
+        "description": "Join a public vault",
+        "usage": "/vault join name:savings",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault leave",
+        "description": "Leave your current vault",
+        "usage": "/vault leave",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault list",
+        "description": "List all vaults in the server",
+        "usage": "/vault list",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault goal",
+        "description": "Set a savings goal for your vault (leader only)",
+        "usage": "/vault goal amount:10000 name:Server Nitro",
+        "category": "vault",
+        "permission": None
+    },
+    {
+        "name": "/vault members",
+        "description": "View vault members and their contributions",
+        "usage": "/vault members",
+        "category": "vault",
+        "permission": None
+    },
+
+    # Starboard Commands (Require administrator)
+    {
+        "name": "/starboard setup",
+        "description": "Set up the starboard hall of fame channel",
+        "usage": "/starboard setup channel:#starboard",
+        "category": "starboard",
+        "permission": "administrator"
+    },
+    {
+        "name": "/starboard threshold",
+        "description": "Set minimum stars required (1-25)",
+        "usage": "/starboard threshold stars:3",
+        "category": "starboard",
+        "permission": "administrator"
+    },
+    {
+        "name": "/starboard emoji",
+        "description": "Set the starboard reaction emoji",
+        "usage": "/starboard emoji emoji:star",
+        "category": "starboard",
+        "permission": "administrator"
+    },
+    {
+        "name": "/starboard selfstar",
+        "description": "Allow or disallow self-starring",
+        "usage": "/starboard selfstar allowed:false",
+        "category": "starboard",
+        "permission": "administrator"
+    },
+    {
+        "name": "/starboard disable",
+        "description": "Disable the starboard",
+        "usage": "/starboard disable",
+        "category": "starboard",
+        "permission": "administrator"
+    },
+    {
+        "name": "/starboard stats",
+        "description": "View starboard statistics",
+        "usage": "/starboard stats",
+        "category": "starboard",
+        "permission": None
+    },
+
+    # Server Config Commands (Require administrator)
+    {
+        "name": "/serverconfig view",
+        "description": "View current server module configuration",
+        "usage": "/serverconfig view",
+        "category": "serverconfig",
+        "permission": "administrator"
+    },
+    {
+        "name": "/serverconfig toggle",
+        "description": "Enable or disable a bot module",
+        "usage": "/serverconfig toggle module:gambling enabled:false",
+        "category": "serverconfig",
+        "permission": "administrator"
+    },
+    {
+        "name": "/serverconfig reset",
+        "description": "Reset all settings to defaults",
+        "usage": "/serverconfig reset",
+        "category": "serverconfig",
+        "permission": "administrator"
+    },
+
+    # Auto-Thread Commands (Require administrator)
+    {
+        "name": "/autothread setup",
+        "description": "Enable auto-threading for a channel",
+        "usage": "/autothread setup channel:#discussions thread_name:Discussion by {user}",
+        "category": "autothread",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autothread disable",
+        "description": "Disable auto-threading for a channel",
+        "usage": "/autothread disable channel:#discussions",
+        "category": "autothread",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autothread list",
+        "description": "List channels with auto-threading enabled",
+        "usage": "/autothread list",
+        "category": "autothread",
+        "permission": "administrator"
+    },
+
+    # Anti-Scam Commands (Require administrator)
+    {
+        "name": "/antiscam enable",
+        "description": "Enable anti-scam link protection",
+        "usage": "/antiscam enable action:delete log_channel:#mod-logs",
+        "category": "antiscam",
+        "permission": "administrator"
+    },
+    {
+        "name": "/antiscam disable",
+        "description": "Disable anti-scam protection",
+        "usage": "/antiscam disable",
+        "category": "antiscam",
+        "permission": "administrator"
+    },
+    {
+        "name": "/antiscam settings",
+        "description": "View current anti-scam settings",
+        "usage": "/antiscam settings",
+        "category": "antiscam",
+        "permission": "administrator"
+    },
+    {
+        "name": "/antiscam whitelist",
+        "description": "Add/remove/list whitelisted domains",
+        "usage": "/antiscam whitelist action:add domain:mysite.com",
+        "category": "antiscam",
+        "permission": "administrator"
+    },
+    {
+        "name": "/antiscam logs",
+        "description": "View recently blocked suspicious links",
+        "usage": "/antiscam logs",
+        "category": "antiscam",
+        "permission": "administrator"
+    },
+
+    # Milestones Commands (Everyone can use)
+    {
+        "name": "/milestones",
+        "description": "View server milestones, records, and firsts",
+        "usage": "/milestones",
+        "category": "milestones",
+        "permission": None
+    },
+    {
+        "name": "/serverhistory",
+        "description": "View detailed server history timeline",
+        "usage": "/serverhistory",
+        "category": "milestones",
+        "permission": None
+    },
+
+    # System Commands (Owner only)
+    {
+        "name": "/system health",
+        "description": "View bot health and performance metrics (Owner only)",
+        "usage": "/system health",
+        "category": "system",
+        "permission": "administrator"
+    },
+    {
+        "name": "/system errors",
+        "description": "View recent error logs (Owner only)",
+        "usage": "/system errors",
+        "category": "system",
+        "permission": "administrator"
+    },
+    {
+        "name": "/system servers",
+        "description": "View server statistics breakdown (Owner only)",
+        "usage": "/system servers",
+        "category": "system",
+        "permission": "administrator"
+    },
+    {
+        "name": "/system clear",
+        "description": "Clear the error log (Owner only)",
+        "usage": "/system clear",
+        "category": "system",
+        "permission": "administrator"
+    },
+
+    # Server Reports Commands (Require administrator)
+    {
+        "name": "/serverreports setup",
+        "description": "Set up automated weekly/daily server reports",
+        "usage": "/serverreports setup channel:#admin frequency:weekly day:0 hour:9",
+        "category": "serverreports",
+        "permission": "administrator"
+    },
+    {
+        "name": "/serverreports disable",
+        "description": "Disable automated server reports",
+        "usage": "/serverreports disable",
+        "category": "serverreports",
+        "permission": "administrator"
+    },
+    {
+        "name": "/serverreports now",
+        "description": "Generate a server report immediately",
+        "usage": "/serverreports now",
+        "category": "serverreports",
+        "permission": "administrator"
+    },
+    {
+        "name": "/serverreports settings",
+        "description": "View current report settings",
+        "usage": "/serverreports settings",
+        "category": "serverreports",
+        "permission": "administrator"
+    },
 ]
 
 # Category display info
@@ -1303,6 +1608,46 @@ CATEGORY_INFO = {
         "name": "Language Commands",
         "emoji": "🌍",
         "description": "Set server language for bot responses"
+    },
+    "vault": {
+        "name": "Vault Commands",
+        "emoji": "🏦",
+        "description": "Shared economy vaults for pooling coins together"
+    },
+    "starboard": {
+        "name": "Starboard Commands",
+        "emoji": "⭐",
+        "description": "Hall of fame for starred messages"
+    },
+    "serverconfig": {
+        "name": "Server Config Commands",
+        "emoji": "⚙️",
+        "description": "Module toggling and server settings"
+    },
+    "autothread": {
+        "name": "Auto-Thread Commands",
+        "emoji": "🧵",
+        "description": "Automatic thread creation for channels"
+    },
+    "antiscam": {
+        "name": "Anti-Scam Commands",
+        "emoji": "🛡️",
+        "description": "Protection against suspicious links"
+    },
+    "milestones": {
+        "name": "Milestone Commands",
+        "emoji": "🏆",
+        "description": "Server records and historical firsts"
+    },
+    "system": {
+        "name": "System Commands",
+        "emoji": "🖥️",
+        "description": "Bot health monitoring (Owner only)"
+    },
+    "serverreports": {
+        "name": "Server Report Commands",
+        "emoji": "📊",
+        "description": "Automated weekly server health reports"
     }
 }
 
@@ -1352,13 +1697,13 @@ class InformationView(View):
                 "name": "Profile & Social",
                 "emoji": "🎨",
                 "color": discord.Color.from_rgb(233, 30, 99),
-                "categories": ["profile", "reminders", "reputation"]
+                "categories": ["profile", "reminders", "reputation", "milestones"]
             },
             {
                 "name": "Economy & Gambling",
                 "emoji": "💰",
                 "color": discord.Color.gold(),
-                "categories": ["economy", "gambling", "shop", "quests", "stocks"]
+                "categories": ["economy", "gambling", "shop", "quests", "stocks", "vault"]
             },
             {
                 "name": "Music & Entertainment",
@@ -1398,6 +1743,18 @@ class InformationView(View):
                 "categories": ["welcome", "goodbye", "autorole"]
             },
             {
+                "name": "Starboard & Threads",
+                "emoji": "⭐",
+                "color": discord.Color.gold(),
+                "categories": ["starboard", "autothread"]
+            },
+            {
+                "name": "Server Config & Reports",
+                "emoji": "⚙️",
+                "color": discord.Color.from_rgb(96, 125, 139),
+                "categories": ["serverconfig", "serverreports", "antiscam"]
+            },
+            {
                 "name": "Language & Localization",
                 "emoji": "🌍",
                 "color": discord.Color.teal(),
@@ -1422,10 +1779,10 @@ class InformationView(View):
                 "categories": ["livealerts", "autonews"]
             },
             {
-                "name": "Owner Commands",
+                "name": "Owner & System",
                 "emoji": "🔐",
                 "color": discord.Color.dark_red(),
-                "categories": ["owner"]
+                "categories": ["owner", "system"]
             },
         ]
 
