@@ -287,11 +287,21 @@ class BlackjackView(View):
                     item.disabled = not can_double
 
     def _disable_all(self):
-        """Disable all buttons"""
+        """Disable all buttons except How to Play"""
         for item in self.children:
-            item.disabled = True
+            if isinstance(item, Button) and item.label != "How to Play":
+                item.disabled = True
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Allow anyone to click "How to Play"
+        if interaction.data.get("custom_id", "").endswith("help_button"):
+            return True
+        # Check if the button clicked is the help button by checking the component
+        for item in self.children:
+            if isinstance(item, Button) and item.label == "How to Play":
+                if hasattr(interaction, 'data') and interaction.data.get('custom_id') == item.custom_id:
+                    return True
+
         if interaction.user.id != self.game.player.id:
             await interaction.response.send_message(
                 "This is not your game!",
@@ -377,6 +387,50 @@ class BlackjackView(View):
 
         self.game.double_down()
         await self._end_game(interaction)
+
+    @discord.ui.button(label="How to Play", style=discord.ButtonStyle.secondary, emoji="❓", row=1)
+    async def help_button(self, interaction: discord.Interaction, button: Button):
+        """Show how to play blackjack"""
+        embed = discord.Embed(
+            title="🃏 How to Play Blackjack",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="🎯 Goal",
+            value="Get closer to **21** than the dealer without going over.",
+            inline=False
+        )
+        embed.add_field(
+            name="🃏 Card Values",
+            value=(
+                "• **2-10** = Face value\n"
+                "• **J, Q, K** = 10\n"
+                "• **A** = 11 or 1 (whichever helps)"
+            ),
+            inline=True
+        )
+        embed.add_field(
+            name="🎮 Actions",
+            value=(
+                "• **Hit** = Draw another card\n"
+                "• **Stand** = Keep your hand\n"
+                "• **Double** = Double bet, get 1 card"
+            ),
+            inline=True
+        )
+        embed.add_field(
+            name="📋 Rules",
+            value=(
+                "• **Blackjack** (21 with 2 cards) pays **1.5x**\n"
+                "• **Win** pays **1x** your bet\n"
+                "• **Bust** (over 21) = You lose\n"
+                "• **Push** (tie) = Bet returned"
+            ),
+            inline=False
+        )
+        embed.set_footer(text="Dealer must hit until 17 or higher")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     async def on_timeout(self):
         """Handle timeout - auto-stand"""
