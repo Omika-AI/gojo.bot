@@ -136,7 +136,7 @@ class Help(commands.Cog):
         # Music
         embed.add_field(
             name="🎵 Music",
-            value="`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle`",
+            value="`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle` `/audiostatus`",
             inline=False
         )
 
@@ -151,6 +151,13 @@ class Help(commands.Cog):
         embed.add_field(
             name="🔊 Voice Channels",
             value="`/tempvc panel` `/vcsignal` `/vclink`",
+            inline=False
+        )
+
+        # Milestones (Everyone)
+        embed.add_field(
+            name="🏆 Milestones",
+            value="`/milestones` `/serverhistory`",
             inline=False
         )
 
@@ -169,7 +176,7 @@ class Help(commands.Cog):
             # Core Admin
             embed.add_field(
                 name="👑 Admin",
-                value="`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/setup` `/dashboard` `/backfill` `/syncstats`",
+                value="`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/setup` `/dashboard` `/backfill` `/syncstats` `/ultraoptimizemusic`",
                 inline=False
             )
 
@@ -229,10 +236,10 @@ class Help(commands.Cog):
                 inline=False
             )
 
-            # Milestones & Anti-Scam
+            # Anti-Scam Security
             embed.add_field(
-                name="🏆 Milestones & Security",
-                value="`/milestones` `/serverhistory` | `/antiscam enable` `/antiscam settings` `/antiscam whitelist`",
+                name="🛡️ Anti-Scam Security",
+                value="`/antiscam enable` `/antiscam disable` `/antiscam settings` `/antiscam whitelist` `/antiscam logs`",
                 inline=False
             )
 
