@@ -21,6 +21,7 @@ import config
 from utils.logger import log_command, logger
 from utils.economy_db import get_balance, add_coins, remove_coins, record_gamble
 from utils.achievements_data import update_user_stat, check_and_complete_achievements, get_user_stats
+from utils.quests_db import update_quest_progress
 
 
 # Card suits and values
@@ -312,6 +313,12 @@ class BlackjackView(View):
             add_coins(self.guild_id, self.game.player.id, self.game.bet + payout, source="blackjack_win")
             record_gamble(self.guild_id, self.game.player.id, self.original_bet, True, payout)
 
+            # Track quest progress - win
+            try:
+                update_quest_progress(self.guild_id, user_id, "blackjack_wins", 1)
+            except:
+                pass
+
             # Track achievement progress
             try:
                 # Track gambling winnings
@@ -452,6 +459,13 @@ class Blackjack(commands.Cog):
         # Take the bet
         remove_coins(interaction.guild.id, interaction.user.id, bet)
 
+        # Track quest progress - game played and coins bet
+        try:
+            update_quest_progress(interaction.guild.id, interaction.user.id, "blackjack_games", 1)
+            update_quest_progress(interaction.guild.id, interaction.user.id, "coins_bet", bet)
+        except:
+            pass
+
         # Create game
         game = BlackjackGame(interaction.user, bet)
         view = BlackjackView(game, bet, interaction.guild.id)
@@ -465,6 +479,12 @@ class Blackjack(commands.Cog):
             elif payout > 0:
                 add_coins(interaction.guild.id, interaction.user.id, bet + payout, source="blackjack_win")
                 record_gamble(interaction.guild.id, interaction.user.id, bet, True, payout)
+
+                # Track quest progress - win
+                try:
+                    update_quest_progress(interaction.guild.id, user_id, "blackjack_wins", 1)
+                except:
+                    pass
 
                 # Track achievement progress
                 try:

@@ -25,6 +25,7 @@ import config
 from utils.logger import log_command, logger
 from utils.economy_db import get_balance, add_coins, remove_coins, record_gamble
 from utils.achievements_data import update_user_stat, check_and_complete_achievements, get_user_stats
+from utils.quests_db import update_quest_progress
 
 
 # Roulette wheel configuration
@@ -393,6 +394,13 @@ class Roulette(commands.Cog):
         # Take the bet
         remove_coins(interaction.guild.id, interaction.user.id, bet)
 
+        # Track quest progress
+        try:
+            update_quest_progress(interaction.guild.id, interaction.user.id, "roulette_games", 1)
+            update_quest_progress(interaction.guild.id, interaction.user.id, "coins_bet", bet)
+        except:
+            pass
+
         # Initial embed - spinning
         embed = discord.Embed(
             title="🎰 Roulette",
@@ -420,6 +428,12 @@ class Roulette(commands.Cog):
             record_gamble(interaction.guild.id, interaction.user.id, bet, True, profit)
             result_color = discord.Color.green()
             result_text = f"**YOU WIN!** +{profit:,} coins"
+
+            # Track quest progress - win
+            try:
+                update_quest_progress(interaction.guild.id, user_id, "roulette_wins", 1)
+            except:
+                pass
 
             # Track achievements
             try:
@@ -512,6 +526,13 @@ class Roulette(commands.Cog):
         # Take the bet
         remove_coins(interaction.guild.id, interaction.user.id, bet)
 
+        # Track quest progress
+        try:
+            update_quest_progress(interaction.guild.id, interaction.user.id, "roulette_games", 1)
+            update_quest_progress(interaction.guild.id, interaction.user.id, "coins_bet", bet)
+        except:
+            pass
+
         # Build bet display
         numbers_display = format_numbers_display(numbers)
 
@@ -551,6 +572,12 @@ class Roulette(commands.Cog):
             record_gamble(interaction.guild.id, interaction.user.id, bet, True, profit)
             result_color = discord.Color.green()
             result_text = f"**YOU WIN!** +{profit:,} coins"
+
+            # Track quest progress - win
+            try:
+                update_quest_progress(interaction.guild.id, user_id, "roulette_wins", 1)
+            except:
+                pass
 
             # Track achievements
             try:

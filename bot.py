@@ -18,6 +18,8 @@ from utils.leveling_db import add_message_xp, add_voice_xp
 from utils.economy_db import add_coins
 from utils.shop_db import has_active_xp_boost, get_expired_custom_roles, remove_custom_role_tracking, get_all_guilds_with_custom_roles
 from utils.live_alerts_db import get_all_guilds_with_streamers, get_alert_channel, get_mention_role, update_streamer_status, get_all_guilds_with_feeds, get_news_channel, update_feed_last_post
+from utils.quests_db import update_quest_progress
+from utils.stocks_db import record_member_activity
 import time
 import aiohttp
 
@@ -122,6 +124,21 @@ async def on_message(message: discord.Message):
                 message.author.id
             )
 
+            # Track message for daily quests
+            update_quest_progress(message.guild.id, message.author.id, "messages_sent", 1)
+
+            # Track XP earned for quests (if XP was actually added)
+            if xp_added and xp_amount > 0:
+                update_quest_progress(message.guild.id, message.author.id, "xp_earned", xp_amount)
+
+            # Track activity for stock market
+            try:
+                record_member_activity(message.guild.id, message.author.id, "messages", 1)
+                if xp_added and xp_amount > 0:
+                    record_member_activity(message.guild.id, message.author.id, "xp_earned", xp_amount)
+            except:
+                pass
+
             # If user leveled up, send a congratulations message
             if new_level is not None:
                 # Build level up message
@@ -219,6 +236,21 @@ async def voice_xp_task():
 
                     # Update the last XP time
                     voice_join_times[user_id]["last_xp_minute"] = current_time
+
+                    # Track voice minutes for daily quests
+                    update_quest_progress(guild_id, user_id, "voice_minutes", minutes_elapsed)
+
+                    # Track XP earned for quests
+                    if xp_amount > 0:
+                        update_quest_progress(guild_id, user_id, "xp_earned", xp_amount)
+
+                    # Track activity for stock market
+                    try:
+                        record_member_activity(guild_id, user_id, "voice_minutes", minutes_elapsed)
+                        if xp_amount > 0:
+                            record_member_activity(guild_id, user_id, "xp_earned", xp_amount)
+                    except:
+                        pass
 
                     # If user leveled up, try to notify them
                     if new_level is not None:

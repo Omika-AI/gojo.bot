@@ -139,6 +139,22 @@ class Help(commands.Cog):
             inline=False
         )
 
+        # Daily Quests Commands (Everyone)
+        quest_cmds = "`/quests` `/questkeys` `/lootbox` `/lootboxodds`"
+        embed.add_field(
+            name="Daily Quests",
+            value=quest_cmds,
+            inline=False
+        )
+
+        # Stock Market Commands (Everyone)
+        stock_cmds = "`/invest` `/sell` `/portfolio` `/stockprice` `/stockmarket`"
+        embed.add_field(
+            name="Stock Market",
+            value=stock_cmds,
+            inline=False
+        )
+
         # Moderation Commands (Mods only)
         if is_mod or is_admin:
             mod_cmds = "`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`"

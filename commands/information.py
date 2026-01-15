@@ -341,6 +341,73 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Daily Quest Commands (Everyone can use)
+    {
+        "name": "/quests",
+        "description": "View your daily quests and progress",
+        "usage": "/quests",
+        "category": "quests",
+        "permission": None
+    },
+    {
+        "name": "/questkeys",
+        "description": "Check how many quest keys you have",
+        "usage": "/questkeys",
+        "category": "quests",
+        "permission": None
+    },
+    {
+        "name": "/lootbox",
+        "description": "Open a lootbox using a quest key for rewards",
+        "usage": "/lootbox",
+        "category": "quests",
+        "permission": None
+    },
+    {
+        "name": "/lootboxodds",
+        "description": "View lootbox reward odds and possible prizes",
+        "usage": "/lootboxodds",
+        "category": "quests",
+        "permission": None
+    },
+
+    # Stock Market Commands (Everyone can use)
+    {
+        "name": "/invest",
+        "description": "Buy shares in another member's stock",
+        "usage": "/invest @user shares:10",
+        "category": "stocks",
+        "permission": None
+    },
+    {
+        "name": "/sell",
+        "description": "Sell shares you own in another member",
+        "usage": "/sell @user shares:5",
+        "category": "stocks",
+        "permission": None
+    },
+    {
+        "name": "/portfolio",
+        "description": "View your investment portfolio and holdings",
+        "usage": "/portfolio",
+        "category": "stocks",
+        "permission": None
+    },
+    {
+        "name": "/stockprice",
+        "description": "Check a member's current stock price and info",
+        "usage": "/stockprice @user",
+        "category": "stocks",
+        "permission": None
+    },
+    {
+        "name": "/stockmarket",
+        "description": "View the community stock market overview",
+        "usage": "/stockmarket",
+        "category": "stocks",
+        "permission": None
+    },
+
     # Moderation Commands (Require specific permissions)
     {
         "name": "/moderationpanel",
@@ -644,6 +711,16 @@ CATEGORY_INFO = {
         "emoji": "🛒",
         "description": "Spend coins on XP boosters and custom roles"
     },
+    "quests": {
+        "name": "Daily Quest Commands",
+        "emoji": "",
+        "description": "Complete daily quests for keys and lootbox rewards"
+    },
+    "stocks": {
+        "name": "Stock Market Commands",
+        "emoji": "",
+        "description": "Invest in other members and profit from their activity"
+    },
     "moderation": {
         "name": "Moderation Commands",
         "emoji": "🛡️",
@@ -711,7 +788,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "shop", "moderation", "support", "admin", "livealerts", "autonews", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "shop", "quests", "stocks", "moderation", "support", "admin", "livealerts", "autonews", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -937,6 +1014,32 @@ class InformationView(View):
             inline=False
         )
 
+        # Daily Quests (Everyone)
+        embed.add_field(
+            name=" Daily Quest System",
+            value=(
+                "• **3 Daily Quests** - New quests every day at midnight UTC\n"
+                "• **Quest Variety** - Gambling, music, chat, voice, and social quests\n"
+                "• **Quest Keys** - Complete all 3 quests to earn a Quest Key\n"
+                "• **Lootboxes** - Open lootboxes for coins and rare roles!\n"
+                "• **Legendary Rewards** - Up to 50,000 coins and exclusive roles"
+            ),
+            inline=False
+        )
+
+        # Stock Market (Everyone)
+        embed.add_field(
+            name=" Community Stock Market",
+            value=(
+                "• **Invest in Members** - Buy shares in active server members\n"
+                "• **Dynamic Prices** - Prices rise with messages, XP, and voice time\n"
+                "• **Buy & Sell** - Use `/invest` and `/sell` to trade\n"
+                "• **Portfolio Tracking** - View your holdings with `/portfolio`\n"
+                "• **Profit from Activity** - Invest in active members and sell high!"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
@@ -1067,6 +1170,8 @@ class InformationView(View):
             "leveling": discord.Color.from_rgb(88, 101, 242),  # Discord Blurple
             "reputation": discord.Color.gold(),  # Gold for reputation
             "shop": discord.Color.teal(),  # Teal for shop
+            "quests": discord.Color.from_rgb(255, 193, 7),  # Amber for quests
+            "stocks": discord.Color.from_rgb(0, 200, 83),  # Green for stocks
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),
             "livealerts": discord.Color.purple(),  # Purple for live alerts (Twitch)
