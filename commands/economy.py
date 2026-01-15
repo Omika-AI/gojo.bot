@@ -20,6 +20,8 @@ from utils.logger import log_command, logger
 from utils.economy_db import (
     get_balance,
     add_coins,
+    remove_coins,
+    transfer_coins,
     claim_daily,
     get_user_stats,
     get_leaderboard,
@@ -168,6 +170,162 @@ class CustomAmountModal(Modal):
 
 
 # =============================================================================
+# SEND COINS VIEW (For /balance command)
+# =============================================================================
+
+class SendCoinsModal(Modal):
+    """Modal for sending coins to another user"""
+
+    def __init__(self, sender: discord.Member, guild: discord.Guild):
+        super().__init__(title="Send Coins")
+        self.sender = sender
+        self.guild = guild
+
+        self.recipient_input = TextInput(
+            label="Recipient (Username or User ID)",
+            placeholder="Enter username or paste user ID",
+            required=True,
+            min_length=1,
+            max_length=50
+        )
+        self.add_item(self.recipient_input)
+
+        self.amount_input = TextInput(
+            label="Amount of Coins",
+            placeholder="Enter amount to send (e.g., 100)",
+            required=True,
+            min_length=1,
+            max_length=10
+        )
+        self.add_item(self.amount_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Parse amount
+            amount = int(self.amount_input.value)
+            if amount <= 0:
+                await interaction.response.send_message(
+                    "Amount must be a positive number!",
+                    ephemeral=True
+                )
+                return
+
+            # Check sender's balance
+            sender_balance = get_balance(0, self.sender.id)
+            if sender_balance < amount:
+                await interaction.response.send_message(
+                    f"You don't have enough coins! Your balance: **{sender_balance:,}** coins",
+                    ephemeral=True
+                )
+                return
+
+            # Find recipient
+            recipient_str = self.recipient_input.value.strip()
+            recipient = None
+
+            # Try to find by ID first
+            try:
+                user_id = int(recipient_str.replace("<@", "").replace(">", "").replace("!", ""))
+                recipient = self.guild.get_member(user_id)
+                if not recipient:
+                    recipient = await self.guild.fetch_member(user_id)
+            except (ValueError, discord.NotFound):
+                pass
+
+            # If not found by ID, search by name
+            if not recipient:
+                recipient_lower = recipient_str.lower()
+                for member in self.guild.members:
+                    if (member.name.lower() == recipient_lower or
+                        member.display_name.lower() == recipient_lower or
+                        (member.global_name and member.global_name.lower() == recipient_lower)):
+                        recipient = member
+                        break
+
+            if not recipient:
+                await interaction.response.send_message(
+                    f"Could not find user **{recipient_str}** in this server!",
+                    ephemeral=True
+                )
+                return
+
+            # Can't send to yourself
+            if recipient.id == self.sender.id:
+                await interaction.response.send_message(
+                    "You can't send coins to yourself!",
+                    ephemeral=True
+                )
+                return
+
+            # Can't send to bots
+            if recipient.bot:
+                await interaction.response.send_message(
+                    "You can't send coins to bots!",
+                    ephemeral=True
+                )
+                return
+
+            # Transfer coins
+            success, message = transfer_coins(0, self.sender.id, recipient.id, amount)
+
+            if success:
+                new_sender_balance = get_balance(0, self.sender.id)
+                new_recipient_balance = get_balance(0, recipient.id)
+
+                embed = discord.Embed(
+                    title="Coins Sent!",
+                    description=f"Successfully sent **{amount:,}** coins to {recipient.mention}",
+                    color=discord.Color.green()
+                )
+                embed.add_field(name="Your New Balance", value=f"**{new_sender_balance:,}** coins", inline=True)
+                embed.add_field(name=f"{recipient.display_name}'s Balance", value=f"**{new_recipient_balance:,}** coins", inline=True)
+                embed.set_footer(text=f"Sent by {self.sender.display_name}")
+
+                await interaction.response.send_message(embed=embed)
+            else:
+                await interaction.response.send_message(
+                    f"Transfer failed: {message}",
+                    ephemeral=True
+                )
+
+        except ValueError:
+            await interaction.response.send_message(
+                "Please enter a valid number for the amount!",
+                ephemeral=True
+            )
+
+
+class BalanceView(View):
+    """View for balance command with send coins button"""
+
+    def __init__(self, user: discord.Member, guild: discord.Guild, timeout: float = 120):
+        super().__init__(timeout=timeout)
+        self.user = user
+        self.guild = guild
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message(
+                "Only the person who ran the command can use this button!",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Send Coins", style=discord.ButtonStyle.success, emoji="💸")
+    async def send_coins(self, interaction: discord.Interaction, button: Button):
+        """Open modal to send coins"""
+        modal = SendCoinsModal(self.user, self.guild)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, emoji="✖️")
+    async def close_button(self, interaction: discord.Interaction, button: Button):
+        """Close the balance view"""
+        await interaction.message.delete()
+        self.stop()
+
+
+# =============================================================================
 # ECONOMY COG
 # =============================================================================
 
@@ -209,7 +367,12 @@ class Economy(commands.Cog):
         )
         embed.add_field(name="Total Gambled", value=f"{stats['total_gambled']:,}", inline=True)
 
-        await interaction.response.send_message(embed=embed)
+        # Only show Send Coins button if checking your own balance
+        if target.id == interaction.user.id:
+            view = BalanceView(interaction.user, interaction.guild)
+            await interaction.response.send_message(embed=embed, view=view)
+        else:
+            await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="claimdaily", description="Claim your daily coins")
     async def claimdaily(self, interaction: discord.Interaction):
