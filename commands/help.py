@@ -166,10 +166,10 @@ class Help(commands.Cog):
                 inline=False
             )
 
-            # Voice, Language & Feeds
+            # Voice & Feeds
             embed.add_field(
-                name="📺 Voice, Language & Feeds",
-                value="`/tempvc setup` | `/language set` `/language list` | `/livealerts setup` `/livealerts add` | `/autonews setup`",
+                name="📺 Voice & Feeds",
+                value="`/tempvc setup` | `/livealerts setup` `/livealerts add` | `/autonews setup`",
                 inline=False
             )
 

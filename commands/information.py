@@ -985,36 +985,6 @@ COMMANDS_REGISTRY = [
         "permission": "administrator"
     },
 
-    # Language Commands (Require administrator)
-    {
-        "name": "/language set",
-        "description": "Set the server language for bot responses",
-        "usage": "/language set language:da",
-        "category": "language",
-        "permission": "administrator"
-    },
-    {
-        "name": "/language list",
-        "description": "List all available languages",
-        "usage": "/language list",
-        "category": "language",
-        "permission": None
-    },
-    {
-        "name": "/language current",
-        "description": "View the current server language",
-        "usage": "/language current",
-        "category": "language",
-        "permission": None
-    },
-    {
-        "name": "/language preview",
-        "description": "Preview how bot messages look in a language",
-        "usage": "/language preview language:da",
-        "category": "language",
-        "permission": None
-    },
-
     # Owner Commands (Server Owner only)
     {
         "name": "/clearlogs",
@@ -1442,11 +1412,6 @@ CATEGORY_INFO = {
         "emoji": "🎭",
         "description": "Auto-assign roles to new members"
     },
-    "language": {
-        "name": "Language Commands",
-        "emoji": "🌍",
-        "description": "Set server language for bot responses"
-    },
     "vault": {
         "name": "Vault Commands",
         "emoji": "🏦",
@@ -1591,12 +1556,6 @@ class InformationView(View):
                 "emoji": "⚙️",
                 "color": discord.Color.from_rgb(96, 125, 139),
                 "categories": ["serverconfig", "serverreports", "antiscam"]
-            },
-            {
-                "name": "Language & Localization",
-                "emoji": "🌍",
-                "color": discord.Color.teal(),
-                "categories": ["language"]
             },
             {
                 "name": "Moderation",
@@ -2047,17 +2006,6 @@ class InformationView(View):
             )
 
             embed.add_field(
-                name="🌍 Multilingual Support",
-                value=(
-                    "• **13 Languages** - EN, DA, DE, ES, FR, PT, NL, IT, PL, RU, JA, KO, ZH\n"
-                    "• **Per-Server Language** - Each server picks their language\n"
-                    "• **Preview Mode** - See translations before switching\n"
-                    "• **Fallback System** - English fallback for missing translations"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
                 name="📝 Deep Logging",
                 value=(
                     "• **Message Tracking** - Edits, deletions with content\n"
@@ -2217,7 +2165,6 @@ class InformationView(View):
             "welcome": discord.Color.from_rgb(76, 175, 80),  # Green for welcome
             "goodbye": discord.Color.from_rgb(121, 85, 72),  # Brown for goodbye
             "autorole": discord.Color.from_rgb(103, 58, 183),  # Deep purple for autorole
-            "language": discord.Color.from_rgb(0, 150, 136),  # Teal for language
             "moderation": discord.Color.orange(),
             "support": discord.Color.from_rgb(96, 125, 139),  # Blue grey for support
             "admin": discord.Color.red(),
