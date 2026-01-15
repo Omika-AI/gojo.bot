@@ -75,9 +75,9 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
     {
-        "name": "/invitebot",
+        "name": "/invitegojo",
         "description": "Get the link to add Gojo to your server",
-        "usage": "/invitebot",
+        "usage": "/invitegojo",
         "category": "general",
         "permission": None
     },

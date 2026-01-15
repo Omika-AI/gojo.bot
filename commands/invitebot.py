@@ -19,8 +19,8 @@ class InviteBot(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="invitebot", description="Get the link to add Gojo to your server")
-    async def invitebot(self, interaction: discord.Interaction):
+    @app_commands.command(name="invitegojo", description="Get the link to add Gojo to your server")
+    async def invitegojo(self, interaction: discord.Interaction):
         """
         Slash command that displays the bot invite link
         Usage: /invitebot

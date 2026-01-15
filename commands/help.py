@@ -73,7 +73,7 @@ class Help(commands.Cog):
         # General Commands
         embed.add_field(
             name="📌 General",
-            value="`/help` `/ping` `/information` `/invitebot` `/dq` `/67` `/start`",
+            value="`/help` `/ping` `/information` `/invitegojo` `/dq` `/67` `/start`",
             inline=False
         )
 
