@@ -1150,6 +1150,13 @@ COMMANDS_REGISTRY = [
         "category": "owner",
         "permission": "administrator"
     },
+    {
+        "name": "/clearmessages",
+        "description": "Bulk delete messages from a channel (Server Owner only)",
+        "usage": "/clearmessages amount:50 OR /clearmessages amount:20 user:@someone channel:#general",
+        "category": "owner",
+        "permission": "administrator"
+    },
 
     # Additional Profile Commands (Everyone can use)
     {

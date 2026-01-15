@@ -192,7 +192,7 @@ class Help(commands.Cog):
         if is_owner:
             embed.add_field(
                 name="🔐 Owner (Logs & System)",
-                value="`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs` | `/system health` `/system errors` `/system servers`",
+                value="`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs` `/clearmessages` | `/system health` `/system errors` `/system servers`",
                 inline=False
             )
 
