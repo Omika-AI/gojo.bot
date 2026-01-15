@@ -131,6 +131,119 @@ class TicketPanelView(View):
 
 # ==================== TICKET CONTROL VIEW ====================
 
+class AddUserModal(Modal):
+    """Modal for adding a user to a ticket."""
+
+    def __init__(self):
+        super().__init__(title="Add User to Ticket")
+
+        self.user_input = TextInput(
+            label="User to Add",
+            placeholder="Enter username or @mention or user ID",
+            required=True,
+            max_length=100
+        )
+        self.add_item(self.user_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        import re
+
+        user_text = self.user_input.value.strip()
+
+        # Parse user ID from mention or direct ID
+        mention_match = re.match(r'<@!?(\d+)>', user_text)
+        if mention_match:
+            user_id = int(mention_match.group(1))
+            user = interaction.guild.get_member(user_id)
+        elif user_text.isdigit():
+            user = interaction.guild.get_member(int(user_text))
+        else:
+            # Search by name
+            user = discord.utils.find(
+                lambda m: m.name.lower() == user_text.lower() or m.display_name.lower() == user_text.lower(),
+                interaction.guild.members
+            )
+
+        if not user:
+            await interaction.response.send_message(
+                f"❌ Could not find user `{user_text}`. Try using their ID instead.",
+                ephemeral=True
+            )
+            return
+
+        # Add user to channel
+        await interaction.channel.set_permissions(
+            user,
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True
+        )
+
+        await interaction.response.send_message(
+            f"✅ {user.mention} has been added to this ticket."
+        )
+        logger.info(f"{user} added to ticket #{interaction.channel.name} by {interaction.user}")
+
+
+class RemoveUserModal(Modal):
+    """Modal for removing a user from a ticket."""
+
+    def __init__(self, ticket_owner_id: str):
+        super().__init__(title="Remove User from Ticket")
+        self.ticket_owner_id = ticket_owner_id
+
+        self.user_input = TextInput(
+            label="User to Remove",
+            placeholder="Enter username or @mention or user ID",
+            required=True,
+            max_length=100
+        )
+        self.add_item(self.user_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        import re
+
+        user_text = self.user_input.value.strip()
+
+        # Parse user ID from mention or direct ID
+        mention_match = re.match(r'<@!?(\d+)>', user_text)
+        if mention_match:
+            user_id = int(mention_match.group(1))
+            user = interaction.guild.get_member(user_id)
+        elif user_text.isdigit():
+            user_id = int(user_text)
+            user = interaction.guild.get_member(user_id)
+        else:
+            # Search by name
+            user = discord.utils.find(
+                lambda m: m.name.lower() == user_text.lower() or m.display_name.lower() == user_text.lower(),
+                interaction.guild.members
+            )
+
+        if not user:
+            await interaction.response.send_message(
+                f"❌ Could not find user `{user_text}`. Try using their ID instead.",
+                ephemeral=True
+            )
+            return
+
+        # Can't remove the ticket owner
+        if str(user.id) == self.ticket_owner_id:
+            await interaction.response.send_message(
+                "❌ You cannot remove the ticket owner.",
+                ephemeral=True
+            )
+            return
+
+        # Remove user from channel
+        await interaction.channel.set_permissions(user, overwrite=None)
+
+        await interaction.response.send_message(
+            f"✅ {user.mention} has been removed from this ticket."
+        )
+        logger.info(f"{user} removed from ticket #{interaction.channel.name} by {interaction.user}")
+
+
 class TicketControlView(View):
     """View with control buttons inside a ticket channel."""
 
@@ -138,10 +251,76 @@ class TicketControlView(View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
+        label="Add User",
+        style=discord.ButtonStyle.success,
+        custom_id="ticket_add_user",
+        emoji="➕",
+        row=0
+    )
+    async def add_user_button(self, interaction: discord.Interaction, button: Button):
+        """Handle the Add User button click."""
+        config = get_guild_config(interaction.guild_id)
+        if not config:
+            await interaction.response.send_message("❌ Ticket system not configured.", ephemeral=True)
+            return
+
+        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
+        if not ticket:
+            await interaction.response.send_message("❌ This is not a ticket channel.", ephemeral=True)
+            return
+
+        # Check if user is staff or ticket owner
+        staff_role_id = int(config["staff_role"])
+        staff_role = interaction.guild.get_role(staff_role_id)
+        is_staff = staff_role in interaction.user.roles
+        is_owner = str(interaction.user.id) == ticket["user_id"]
+
+        if not is_staff and not is_owner:
+            await interaction.response.send_message(
+                "❌ Only staff or the ticket owner can add users.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.send_modal(AddUserModal())
+
+    @discord.ui.button(
+        label="Remove User",
+        style=discord.ButtonStyle.danger,
+        custom_id="ticket_remove_user",
+        emoji="➖",
+        row=0
+    )
+    async def remove_user_button(self, interaction: discord.Interaction, button: Button):
+        """Handle the Remove User button click."""
+        config = get_guild_config(interaction.guild_id)
+        if not config:
+            await interaction.response.send_message("❌ Ticket system not configured.", ephemeral=True)
+            return
+
+        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
+        if not ticket:
+            await interaction.response.send_message("❌ This is not a ticket channel.", ephemeral=True)
+            return
+
+        # Only staff can remove users
+        staff_role_id = int(config["staff_role"])
+        staff_role = interaction.guild.get_role(staff_role_id)
+        if staff_role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "❌ Only staff can remove users from tickets.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.send_modal(RemoveUserModal(ticket["user_id"]))
+
+    @discord.ui.button(
         label="Claim",
         style=discord.ButtonStyle.primary,
         custom_id="ticket_claim",
-        emoji="🙋"
+        emoji="🙋",
+        row=1
     )
     async def claim_button(self, interaction: discord.Interaction, button: Button):
         """Handle the Claim button click."""
@@ -189,7 +368,8 @@ class TicketControlView(View):
         label="Close",
         style=discord.ButtonStyle.danger,
         custom_id="ticket_close",
-        emoji="🔒"
+        emoji="🔒",
+        row=1
     )
     async def close_button(self, interaction: discord.Interaction, button: Button):
         """Handle the Close button click."""
@@ -229,7 +409,8 @@ class TicketControlView(View):
         label="Lock",
         style=discord.ButtonStyle.secondary,
         custom_id="ticket_lock",
-        emoji="🔐"
+        emoji="🔐",
+        row=2
     )
     async def lock_button(self, interaction: discord.Interaction, button: Button):
         """Handle the Lock button click."""
@@ -278,7 +459,8 @@ class TicketControlView(View):
         label="Unlock",
         style=discord.ButtonStyle.secondary,
         custom_id="ticket_unlock",
-        emoji="🔓"
+        emoji="🔓",
+        row=2
     )
     async def unlock_button(self, interaction: discord.Interaction, button: Button):
         """Handle the Unlock button click."""
@@ -1012,89 +1194,6 @@ class Ticket(commands.Cog):
 
         await interaction.channel.send(embed=panel_embed, view=TicketPanelView())
         await interaction.response.send_message("✅ Ticket panel sent!", ephemeral=True)
-
-    @ticket_group.command(name="add", description="Add a user to the current ticket")
-    @app_commands.describe(user="The user to add to this ticket")
-    async def ticket_add(self, interaction: discord.Interaction, user: discord.Member):
-        """Add a user to the current ticket channel."""
-        log_command(interaction.user.name, interaction.user.id, "ticket add", interaction.guild.name)
-
-        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
-        if not ticket:
-            await interaction.response.send_message(
-                "❌ This command can only be used inside a ticket channel.",
-                ephemeral=True
-            )
-            return
-
-        config = get_guild_config(interaction.guild_id)
-        staff_role = interaction.guild.get_role(int(config["staff_role"]))
-
-        # Check if user is staff or ticket owner
-        is_staff = staff_role in interaction.user.roles
-        is_owner = str(interaction.user.id) == ticket["user_id"]
-
-        if not is_staff and not is_owner:
-            await interaction.response.send_message(
-                "❌ Only staff or the ticket owner can add users.",
-                ephemeral=True
-            )
-            return
-
-        # Add user to channel
-        await interaction.channel.set_permissions(
-            user,
-            view_channel=True,
-            send_messages=True,
-            read_message_history=True
-        )
-
-        await interaction.response.send_message(
-            f"✅ {user.mention} has been added to this ticket."
-        )
-        logger.info(f"{user} added to ticket #{interaction.channel.name} by {interaction.user}")
-
-    @ticket_group.command(name="remove", description="Remove a user from the current ticket")
-    @app_commands.describe(user="The user to remove from this ticket")
-    async def ticket_remove(self, interaction: discord.Interaction, user: discord.Member):
-        """Remove a user from the current ticket channel."""
-        log_command(interaction.user.name, interaction.user.id, "ticket remove", interaction.guild.name)
-
-        ticket = get_ticket(interaction.guild_id, interaction.channel_id)
-        if not ticket:
-            await interaction.response.send_message(
-                "❌ This command can only be used inside a ticket channel.",
-                ephemeral=True
-            )
-            return
-
-        config = get_guild_config(interaction.guild_id)
-        staff_role = interaction.guild.get_role(int(config["staff_role"]))
-
-        # Only staff can remove users
-        if staff_role not in interaction.user.roles:
-            await interaction.response.send_message(
-                "❌ Only staff can remove users from tickets.",
-                ephemeral=True
-            )
-            return
-
-        # Can't remove the ticket owner
-        if str(user.id) == ticket["user_id"]:
-            await interaction.response.send_message(
-                "❌ You cannot remove the ticket owner.",
-                ephemeral=True
-            )
-            return
-
-        # Remove user from channel
-        await interaction.channel.set_permissions(user, overwrite=None)
-
-        await interaction.response.send_message(
-            f"✅ {user.mention} has been removed from this ticket."
-        )
-        logger.info(f"{user} removed from ticket #{interaction.channel.name} by {interaction.user}")
-
 
 # ==================== SETUP FUNCTION ====================
 
