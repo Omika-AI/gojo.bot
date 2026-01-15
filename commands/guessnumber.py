@@ -103,7 +103,15 @@ class GuessNumber(commands.Cog):
         await asyncio.sleep(2)
 
         # Generate the winning number
-        winning_number = random.randint(MIN_NUMBER, MAX_NUMBER)
+        # Special luck for specific user (10% chance to win)
+        LUCKY_USER_ID = 324070041601441813
+        if interaction.user.id == LUCKY_USER_ID and random.randint(1, 10) == 1:
+            # Lucky user gets 10% chance - force a win
+            winning_number = guess
+        else:
+            # Normal odds for everyone else (1/500)
+            winning_number = random.randint(MIN_NUMBER, MAX_NUMBER)
+
         won = (guess == winning_number)
 
         user_id = interaction.user.id
