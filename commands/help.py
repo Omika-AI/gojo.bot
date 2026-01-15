@@ -94,7 +94,7 @@ class Help(commands.Cog):
         # Economy & Gambling + Vault
         embed.add_field(
             name="💰 Economy & Gambling",
-            value="`/balance` `/claimdaily` `/leaderboard` `/blackjack` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`",
+            value="`/balance` `/claimdaily` `/leaderboard` `/bj` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`",
             inline=False
         )
 

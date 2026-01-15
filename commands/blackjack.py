@@ -426,7 +426,7 @@ class Blackjack(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="blackjack", description="Play blackjack against the dealer")
+    @app_commands.command(name="bj", description="Play blackjack against the dealer")
     @app_commands.describe(bet="Amount of coins to bet")
     async def blackjack(self, interaction: discord.Interaction, bet: int):
         """Play blackjack"""

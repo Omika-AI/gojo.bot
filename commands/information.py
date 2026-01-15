@@ -241,9 +241,9 @@ COMMANDS_REGISTRY = [
 
     # Gambling Commands (Everyone can use)
     {
-        "name": "/blackjack",
+        "name": "/bj",
         "description": "Play blackjack against the dealer (1x-1.5x payout)",
-        "usage": "/blackjack bet:100",
+        "usage": "/bj bet:100",
         "category": "gambling",
         "permission": None
     },
