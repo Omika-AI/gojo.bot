@@ -240,6 +240,16 @@ def add_message_xp(guild_id: int, user_id: int) -> Tuple[bool, int, Optional[int
 
     # Calculate XP to add
     xp_amount = random.randint(MESSAGE_XP_MIN, MESSAGE_XP_MAX)
+
+    # Check for XP boost from shop
+    try:
+        from utils.shop_db import has_active_xp_boost
+        has_boost, multiplier = has_active_xp_boost(guild_id, user_id)
+        if has_boost:
+            xp_amount = int(xp_amount * multiplier)
+    except:
+        pass  # Shop module not available, no boost
+
     old_level = level_from_xp(user_data["total_xp"])
 
     # Add XP
@@ -284,6 +294,18 @@ def add_voice_xp(guild_id: int, user_id: int, minutes: int = 1) -> Tuple[int, Op
     guild_str = str(guild_id)
     user_str = str(user_id)
 
+    # Calculate XP with potential boost
+    xp_amount = VOICE_XP_PER_MINUTE * minutes
+
+    # Check for XP boost from shop
+    try:
+        from utils.shop_db import has_active_xp_boost
+        has_boost, multiplier = has_active_xp_boost(guild_id, user_id)
+        if has_boost:
+            xp_amount = int(xp_amount * multiplier)
+    except:
+        pass  # Shop module not available, no boost
+
     # Initialize structures if needed
     if guild_str not in data["guilds"]:
         data["guilds"][guild_str] = {"users": {}}
@@ -300,8 +322,7 @@ def add_voice_xp(guild_id: int, user_id: int, minutes: int = 1) -> Tuple[int, Op
 
     user_data = data["guilds"][guild_str]["users"][user_str]
 
-    # Calculate XP
-    xp_amount = VOICE_XP_PER_MINUTE * minutes
+    # XP already calculated above with boost applied
     old_level = level_from_xp(user_data["total_xp"])
 
     # Add XP and track voice minutes

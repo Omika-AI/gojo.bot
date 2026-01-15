@@ -16,7 +16,10 @@ from utils.logger import logger, log_startup, log_shutdown, log_error
 from utils.achievements_data import update_user_stat, check_and_complete_achievements
 from utils.leveling_db import add_message_xp, add_voice_xp
 from utils.economy_db import add_coins
+from utils.shop_db import has_active_xp_boost, get_expired_custom_roles, remove_custom_role_tracking, get_all_guilds_with_custom_roles
+from utils.live_alerts_db import get_all_guilds_with_streamers, get_alert_channel, get_mention_role, update_streamer_status, get_all_guilds_with_feeds, get_news_channel, update_feed_last_post
 import time
+import aiohttp
 
 # Create the bot instance with required intents
 # Intents control what events the bot can receive from Discord
@@ -55,8 +58,11 @@ async def on_ready():
     except Exception as e:
         log_error(e, "Failed to sync commands")
 
-    # Start the voice XP background task
+    # Start background tasks
     bot.loop.create_task(voice_xp_task())
+    bot.loop.create_task(live_alerts_task())
+    bot.loop.create_task(auto_news_task())
+    bot.loop.create_task(shop_cleanup_task())
 
 
 @bot.event
@@ -256,6 +262,243 @@ async def voice_xp_task():
 
         # Check every 30 seconds
         await asyncio.sleep(30)
+
+
+async def live_alerts_task():
+    """Background task to check if tracked streamers are live"""
+    await bot.wait_until_ready()
+    logger.info("[LIVE ALERTS] Live alerts background task started")
+
+    while not bot.is_closed():
+        try:
+            guilds_with_streamers = get_all_guilds_with_streamers()
+
+            for guild_id, streamers in guilds_with_streamers:
+                guild = bot.get_guild(guild_id)
+                if not guild:
+                    continue
+
+                alert_channel_id = get_alert_channel(guild_id)
+                if not alert_channel_id:
+                    continue
+
+                alert_channel = guild.get_channel(alert_channel_id)
+                if not alert_channel:
+                    continue
+
+                mention_role_id = get_mention_role(guild_id)
+
+                for streamer in streamers:
+                    try:
+                        platform = streamer["platform"]
+                        username = streamer["username"]
+                        last_status = streamer.get("last_status", "offline")
+
+                        is_live = False
+                        stream_title = ""
+                        stream_url = ""
+                        thumbnail_url = ""
+
+                        # Check Twitch
+                        if platform == "twitch":
+                            async with aiohttp.ClientSession() as session:
+                                # Use Twitch's public endpoint (no auth needed for basic check)
+                                url = f"https://decapi.me/twitch/uptime/{username}"
+                                async with session.get(url) as response:
+                                    if response.status == 200:
+                                        text = await response.text()
+                                        is_live = "offline" not in text.lower()
+                                        if is_live:
+                                            stream_url = f"https://twitch.tv/{username}"
+                                            stream_title = f"{username} is now live on Twitch!"
+
+                        # Check YouTube (using RSS feed)
+                        elif platform == "youtube":
+                            async with aiohttp.ClientSession() as session:
+                                # Try to check if channel has a live stream
+                                # This is a simplified check - full implementation would use YouTube API
+                                url = f"https://www.youtube.com/@{username}/live"
+                                async with session.get(url, allow_redirects=False) as response:
+                                    # If it doesn't redirect, there might be a live stream
+                                    is_live = response.status == 200
+                                    if is_live:
+                                        stream_url = f"https://www.youtube.com/@{username}/live"
+                                        stream_title = f"{username} is now live on YouTube!"
+
+                        # Send notification if went live
+                        if is_live and last_status != "live":
+                            embed = discord.Embed(
+                                title=f"🔴 {username} is LIVE!",
+                                description=stream_title,
+                                color=discord.Color.red() if platform == "youtube" else discord.Color.purple(),
+                                url=stream_url
+                            )
+                            embed.add_field(name="Platform", value=platform.title(), inline=True)
+                            embed.add_field(name="Watch Now", value=f"[Click Here]({stream_url})", inline=True)
+                            embed.set_footer(text=f"Live Alert • {platform.title()}")
+
+                            # Build message content
+                            content = ""
+                            if mention_role_id:
+                                role = guild.get_role(mention_role_id)
+                                if role:
+                                    content = role.mention
+
+                            await alert_channel.send(content=content if content else None, embed=embed)
+                            logger.info(f"[LIVE ALERT] {username} went live on {platform} in {guild.name}")
+
+                        # Update status
+                        new_status = "live" if is_live else "offline"
+                        if new_status != last_status:
+                            update_streamer_status(guild_id, platform, username, new_status, notified=is_live)
+
+                    except Exception as e:
+                        logger.error(f"Error checking streamer {streamer.get('username')}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error in live alerts task: {e}")
+
+        # Check every 5 minutes
+        await asyncio.sleep(300)
+
+
+async def auto_news_task():
+    """Background task to fetch and post news from Reddit/RSS feeds"""
+    await bot.wait_until_ready()
+    logger.info("[AUTO NEWS] Auto news background task started")
+
+    while not bot.is_closed():
+        try:
+            guilds_with_feeds = get_all_guilds_with_feeds()
+
+            for guild_id, feeds in guilds_with_feeds:
+                guild = bot.get_guild(guild_id)
+                if not guild:
+                    continue
+
+                news_channel_id = get_news_channel(guild_id)
+                if not news_channel_id:
+                    continue
+
+                news_channel = guild.get_channel(news_channel_id)
+                if not news_channel:
+                    continue
+
+                for feed in feeds:
+                    try:
+                        feed_type = feed["type"]
+                        feed_url = feed["url"]
+                        last_post_id = feed.get("last_post_id")
+
+                        if feed_type == "reddit":
+                            # Parse subreddit and filter from URL
+                            parts = feed_url.split("/")
+                            subreddit = parts[0]
+                            filter_type = parts[1] if len(parts) > 1 else "hot"
+
+                            async with aiohttp.ClientSession() as session:
+                                url = f"https://www.reddit.com/r/{subreddit}/{filter_type}.json?limit=1"
+                                headers = {"User-Agent": "GojoBot/1.0"}
+                                async with session.get(url, headers=headers) as response:
+                                    if response.status == 200:
+                                        data = await response.json()
+                                        posts = data.get("data", {}).get("children", [])
+
+                                        if posts:
+                                            post = posts[0]["data"]
+                                            post_id = post.get("id")
+
+                                            # Only post if it's new
+                                            if post_id and post_id != last_post_id:
+                                                title = post.get("title", "No title")[:256]
+                                                author = post.get("author", "Unknown")
+                                                score = post.get("score", 0)
+                                                permalink = f"https://reddit.com{post.get('permalink', '')}"
+                                                thumbnail = post.get("thumbnail", "")
+
+                                                embed = discord.Embed(
+                                                    title=title,
+                                                    url=permalink,
+                                                    color=discord.Color.orange()
+                                                )
+                                                embed.set_author(name=f"r/{subreddit}", url=f"https://reddit.com/r/{subreddit}")
+                                                embed.add_field(name="Author", value=f"u/{author}", inline=True)
+                                                embed.add_field(name="Score", value=f"⬆️ {score:,}", inline=True)
+
+                                                # Add image if available
+                                                if thumbnail and thumbnail.startswith("http"):
+                                                    embed.set_thumbnail(url=thumbnail)
+
+                                                # Check for image post
+                                                post_url = post.get("url", "")
+                                                if any(ext in post_url for ext in [".jpg", ".jpeg", ".png", ".gif"]):
+                                                    embed.set_image(url=post_url)
+
+                                                embed.set_footer(text="Reddit • Auto News")
+
+                                                await news_channel.send(embed=embed)
+                                                update_feed_last_post(guild_id, feed_type, feed_url, post_id)
+                                                logger.info(f"[AUTO NEWS] Posted from r/{subreddit} in {guild.name}")
+
+                        elif feed_type == "rss":
+                            # RSS feed parsing would require feedparser library
+                            # For now, skip RSS feeds or add basic support
+                            pass
+
+                    except Exception as e:
+                        logger.error(f"Error fetching feed {feed.get('url')}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error in auto news task: {e}")
+
+        # Check every 10 minutes
+        await asyncio.sleep(600)
+
+
+async def shop_cleanup_task():
+    """Background task to clean up expired shop items (custom roles, etc.)"""
+    await bot.wait_until_ready()
+    logger.info("[SHOP] Shop cleanup background task started")
+
+    while not bot.is_closed():
+        try:
+            guilds = get_all_guilds_with_custom_roles()
+
+            for guild_id in guilds:
+                guild = bot.get_guild(guild_id)
+                if not guild:
+                    continue
+
+                # Get expired custom roles
+                expired_roles = get_expired_custom_roles(guild_id)
+
+                for role_id, user_id in expired_roles:
+                    try:
+                        role = guild.get_role(role_id)
+                        if role:
+                            # Remove the role from the user
+                            member = guild.get_member(user_id)
+                            if member:
+                                await member.remove_roles(role, reason="Custom role expired")
+
+                            # Delete the role
+                            await role.delete(reason="Custom role expired")
+                            logger.info(f"[SHOP] Deleted expired custom role '{role.name}' in {guild.name}")
+
+                        # Remove from tracking
+                        remove_custom_role_tracking(guild_id, role_id)
+
+                    except discord.Forbidden:
+                        logger.error(f"No permission to delete role {role_id} in {guild.name}")
+                        remove_custom_role_tracking(guild_id, role_id)
+                    except Exception as e:
+                        logger.error(f"Error cleaning up role {role_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error in shop cleanup task: {e}")
+
+        # Check every 5 minutes
+        await asyncio.sleep(300)
 
 
 async def load_commands():

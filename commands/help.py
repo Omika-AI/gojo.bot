@@ -131,6 +131,14 @@ class Help(commands.Cog):
             inline=False
         )
 
+        # Shop Commands (Everyone)
+        shop_cmds = "`/shop` `/buy` `/inventory`"
+        embed.add_field(
+            name="🛒 Shop",
+            value=shop_cmds,
+            inline=False
+        )
+
         # Moderation Commands (Mods only)
         if is_mod or is_admin:
             mod_cmds = "`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`"
@@ -146,6 +154,22 @@ class Help(commands.Cog):
             embed.add_field(
                 name="👑 Admin",
                 value=admin_cmds,
+                inline=False
+            )
+
+            # Live Alerts Commands (Admins only)
+            live_cmds = "`/livealerts setup` `/livealerts add` `/livealerts remove` `/livealerts list` `/livealerts role`"
+            embed.add_field(
+                name="📺 Live Alerts",
+                value=live_cmds,
+                inline=False
+            )
+
+            # Auto News Commands (Admins only)
+            news_cmds = "`/autonews setup` `/autonews reddit` `/autonews rss` `/autonews remove` `/autonews list`"
+            embed.add_field(
+                name="📰 Auto News",
+                value=news_cmds,
                 inline=False
             )
 

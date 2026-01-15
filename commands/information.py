@@ -318,6 +318,29 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Shop Commands (Everyone can use)
+    {
+        "name": "/shop",
+        "description": "Browse the server shop for XP boosters, custom roles, and more",
+        "usage": "/shop",
+        "category": "shop",
+        "permission": None
+    },
+    {
+        "name": "/buy",
+        "description": "Purchase an item from the shop",
+        "usage": "/buy item:xp_boost_2h",
+        "category": "shop",
+        "permission": None
+    },
+    {
+        "name": "/inventory",
+        "description": "View your active shop items and purchases",
+        "usage": "/inventory",
+        "category": "shop",
+        "permission": None
+    },
+
     # Moderation Commands (Require specific permissions)
     {
         "name": "/moderationpanel",
@@ -425,6 +448,80 @@ COMMANDS_REGISTRY = [
         "usage": "/syncstats or /syncstats user:@someone",
         "category": "admin",
         "permission": "administrator"
+    },
+
+    # Live Alerts Commands (Require administrator)
+    {
+        "name": "/livealerts setup",
+        "description": "Set up the channel for live stream alerts",
+        "usage": "/livealerts setup channel:#alerts",
+        "category": "livealerts",
+        "permission": "administrator"
+    },
+    {
+        "name": "/livealerts add",
+        "description": "Add a Twitch or YouTube streamer to track",
+        "usage": "/livealerts add platform:twitch username:ninja",
+        "category": "livealerts",
+        "permission": "administrator"
+    },
+    {
+        "name": "/livealerts remove",
+        "description": "Remove a streamer from tracking",
+        "usage": "/livealerts remove platform:twitch username:ninja",
+        "category": "livealerts",
+        "permission": "administrator"
+    },
+    {
+        "name": "/livealerts list",
+        "description": "List all tracked streamers and configuration",
+        "usage": "/livealerts list",
+        "category": "livealerts",
+        "permission": None
+    },
+    {
+        "name": "/livealerts role",
+        "description": "Set a role to ping when someone goes live",
+        "usage": "/livealerts role @StreamNotify",
+        "category": "livealerts",
+        "permission": "administrator"
+    },
+
+    # Auto News Commands (Require administrator)
+    {
+        "name": "/autonews setup",
+        "description": "Set up the channel for automated news posts",
+        "usage": "/autonews setup channel:#community-feed",
+        "category": "autonews",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autonews reddit",
+        "description": "Add a subreddit to auto-post from",
+        "usage": "/autonews reddit subreddit:gaming filter_type:hot",
+        "category": "autonews",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autonews rss",
+        "description": "Add an RSS feed to auto-post from",
+        "usage": "/autonews rss url:https://example.com/feed.xml",
+        "category": "autonews",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autonews remove",
+        "description": "Remove a feed from tracking",
+        "usage": "/autonews remove feed_type:reddit identifier:gaming",
+        "category": "autonews",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autonews list",
+        "description": "List all configured news feeds",
+        "usage": "/autonews list",
+        "category": "autonews",
+        "permission": None
     },
 
     # Support/Ticket Commands (Require administrator)
@@ -542,6 +639,11 @@ CATEGORY_INFO = {
         "emoji": "⭐",
         "description": "Social recognition for helpful members"
     },
+    "shop": {
+        "name": "Shop Commands",
+        "emoji": "🛒",
+        "description": "Spend coins on XP boosters and custom roles"
+    },
     "moderation": {
         "name": "Moderation Commands",
         "emoji": "🛡️",
@@ -556,6 +658,16 @@ CATEGORY_INFO = {
         "name": "Admin Commands",
         "emoji": "👑",
         "description": "Powerful tools for administrators"
+    },
+    "livealerts": {
+        "name": "Live Alert Commands",
+        "emoji": "📺",
+        "description": "Stream notifications for Twitch and YouTube"
+    },
+    "autonews": {
+        "name": "Auto News Commands",
+        "emoji": "📰",
+        "description": "Automated news from Reddit and RSS feeds"
     },
     "owner": {
         "name": "Owner Commands",
@@ -599,7 +711,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "moderation", "support", "admin", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "shop", "moderation", "support", "admin", "livealerts", "autonews", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -812,6 +924,19 @@ class InformationView(View):
             inline=False
         )
 
+        # Shop System (Everyone)
+        embed.add_field(
+            name="🛒 Server Shop",
+            value=(
+                "• **XP Boosters** - Double XP for 2h, 6h, or 24h\n"
+                "• **Custom Roles** - Buy a custom colored role for 1 week or 1 month\n"
+                "• **Browse & Buy** - Use `/shop` to see items, `/buy` to purchase\n"
+                "• **Inventory** - Track your active items with `/inventory`\n"
+                "• **Auto-Expiry** - Temporary items are automatically removed when expired"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
@@ -837,6 +962,30 @@ class InformationView(View):
                     "• **Lock/Unlock** - Temporarily prevent user from typing\n"
                     "• **Transcripts** - Save ticket conversations to log channel\n"
                     "• **Safe Close** - Close with reopen option, delete confirmation"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="📺 Live Stream Alerts",
+                value=(
+                    "• **Twitch & YouTube** - Get alerts when streamers go live\n"
+                    "• **Auto-Detection** - Bot checks every 5 minutes for new streams\n"
+                    "• **Custom Channel** - Set which channel receives alerts\n"
+                    "• **Role Pings** - Optionally ping a role when someone goes live\n"
+                    "• **Rich Embeds** - Beautiful alerts with streamer info and links"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="📰 Auto News Feeds",
+                value=(
+                    "• **Reddit Integration** - Auto-post from any subreddit\n"
+                    "• **RSS Support** - Subscribe to any RSS feed\n"
+                    "• **Filter Options** - Choose hot, new, or top posts\n"
+                    "• **Automatic Posts** - Bot fetches new content every 10 minutes\n"
+                    "• **Rich Formatting** - Posts include titles, links, and thumbnails"
                 ),
                 inline=False
             )
@@ -917,8 +1066,11 @@ class InformationView(View):
             "achievements": discord.Color.from_rgb(255, 165, 0),  # Orange/Gold
             "leveling": discord.Color.from_rgb(88, 101, 242),  # Discord Blurple
             "reputation": discord.Color.gold(),  # Gold for reputation
+            "shop": discord.Color.teal(),  # Teal for shop
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),
+            "livealerts": discord.Color.purple(),  # Purple for live alerts (Twitch)
+            "autonews": discord.Color.from_rgb(255, 69, 0),  # Reddit orange
             "owner": discord.Color.dark_red()
         }
         return colors.get(category, discord.Color.blurple())
