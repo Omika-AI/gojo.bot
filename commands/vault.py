@@ -676,6 +676,12 @@ class VaultPanelView(View):
                 ephemeral=True
             )
 
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, emoji="✖️", row=1)
+    async def close_button(self, interaction: discord.Interaction, button: Button):
+        """Close the vault panel"""
+        await interaction.message.delete()
+        self.stop()
+
 
 # =============================================================================
 # COG
