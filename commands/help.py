@@ -73,7 +73,7 @@ class Help(commands.Cog):
         # General Commands
         embed.add_field(
             name="📌 General",
-            value="`/help` `/ping` `/information` `/invitegojo` `/dq` `/67` `/start`",
+            value="`/help` `/ping` `/information` `/invitegojo` `/dq` `/67` `/start` `/remind` `/reminders`",
             inline=False
         )
 
@@ -86,19 +86,12 @@ class Help(commands.Cog):
 
         # Profile & Customization
         embed.add_field(
-            name="🎨 Profile & Customization",
+            name="🎨 Profile",
             value="`/profile` `/profilecard` `/profilecolor` `/profilepresets` `/profilemotto` `/profilebanner` `/profilebadges` `/profilefeature`",
             inline=False
         )
 
-        # Reminders
-        embed.add_field(
-            name="⏰ Reminders",
-            value="`/remind` `/reminders`",
-            inline=False
-        )
-
-        # Economy & Gambling
+        # Economy & Gambling + Vault
         embed.add_field(
             name="💰 Economy & Gambling",
             value="`/balance` `/claimdaily` `/leaderboard` `/blackjack` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`",
@@ -107,15 +100,8 @@ class Help(commands.Cog):
 
         # Vault (Shared Economy)
         embed.add_field(
-            name="🏦 Vault",
-            value="`/vault create` `/vault deposit` `/vault withdraw` `/vault info` `/vault join` `/vault leave` `/vault list` `/vault goal` `/vault members`",
-            inline=False
-        )
-
-        # Stock Market
-        embed.add_field(
-            name="📈 Stock Market",
-            value="`/invest` `/sell` `/portfolio` `/stockprice` `/stockmarket`",
+            name="🏦 Vault & Stocks",
+            value="`/vault create` `/vault deposit` `/vault withdraw` `/vault info` `/vault join` `/vault list` | `/invest` `/sell` `/portfolio` `/stockprice`",
             inline=False
         )
 
@@ -126,38 +112,24 @@ class Help(commands.Cog):
             inline=False
         )
 
-        # Leveling & Achievements
+        # Leveling & Achievements + Milestones
         embed.add_field(
-            name="📊 Leveling & Achievements",
-            value="`/rank` `/xpleaderboard` `/levels` `/achievements` `/achievementstats` `/rep` `/repcheck` `/repleaderboard`",
+            name="📊 Leveling & Milestones",
+            value="`/rank` `/xpleaderboard` `/levels` `/achievements` `/achievementstats` `/rep` `/repleaderboard` `/milestones` `/serverhistory`",
             inline=False
         )
 
-        # Music
+        # Music & Karaoke
         embed.add_field(
-            name="🎵 Music",
-            value="`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle` `/audiostatus`",
-            inline=False
-        )
-
-        # Karaoke
-        embed.add_field(
-            name="🎤 Karaoke",
-            value="`/karaokelist` `/karaokesolo` `/karaokeduet` `/karaoke`",
+            name="🎵 Music & Karaoke",
+            value="`/play` `/playlist` `/queue` `/nowplaying` `/pause` `/skip` `/stop` `/volume` `/shuffle` | `/karaoke` `/karaokelist`",
             inline=False
         )
 
         # Voice Channels
         embed.add_field(
             name="🔊 Voice Channels",
-            value="`/tempvc panel` `/vcsignal` `/vclink`",
-            inline=False
-        )
-
-        # Milestones (Everyone)
-        embed.add_field(
-            name="🏆 Milestones",
-            value="`/milestones` `/serverhistory`",
+            value="`/tempvc panel` `/vcsignal` `/vclink` `/audiostatus`",
             inline=False
         )
 
@@ -175,71 +147,43 @@ class Help(commands.Cog):
         if is_admin:
             # Core Admin
             embed.add_field(
-                name="👑 Admin",
-                value="`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/setup` `/dashboard` `/backfill` `/syncstats` `/ultraoptimizemusic`",
+                name="👑 Admin Core",
+                value="`/adminprofile` `/webhook` `/givecoins` `/setup` `/dashboard` `/backfill` `/syncstats`",
                 inline=False
             )
 
-            # Giveaways & Polls
+            # Giveaways, Polls & Custom Commands
             embed.add_field(
                 name="🎉 Giveaways & Polls",
-                value="`/giveaway start` `/giveaway end` `/giveaway reroll` `/giveaway list` | `/poll create` `/poll end` `/poll results`",
+                value="`/giveaway start` `/giveaway end` `/giveaway reroll` | `/poll create` `/poll end` | `/customcmd create` `/customcmd list`",
                 inline=False
             )
 
-            # Reaction Roles & Custom Commands
+            # Reaction Roles & Member Management
             embed.add_field(
-                name="🏷️ Roles & Custom Commands",
-                value="`/reactionrole create` `/reactionrole addrole` `/reactionrole list` | `/customcmd create` `/customcmd list`",
+                name="👋 Roles & Members",
+                value="`/reactionrole create` `/reactionrole addrole` | `/welcome enable` `/welcome channel` | `/goodbye enable` | `/autorole add`",
                 inline=False
             )
 
-            # Member Management (Welcome/Goodbye/Autorole)
+            # Voice, Language & Feeds
             embed.add_field(
-                name="👋 Member Management",
-                value="`/welcome enable` `/welcome channel` `/welcome test` | `/goodbye enable` | `/autorole add` `/autorole list`",
+                name="📺 Voice, Language & Feeds",
+                value="`/tempvc setup` | `/language set` `/language list` | `/livealerts setup` `/livealerts add` | `/autonews setup`",
                 inline=False
             )
 
-            # Voice & Language
+            # Tickets, Starboard & Threads
             embed.add_field(
-                name="🔊 Voice & Language",
-                value="`/tempvc setup` `/tempvc disable` | `/language set` `/language list` `/language preview`",
+                name="🎫 Tickets & Starboard",
+                value="`/ticket setup` `/ticket panel` | `/starboard setup` `/starboard threshold` | `/autothread setup` `/autothread list`",
                 inline=False
             )
 
-            # Feeds & Alerts
+            # Server Config, Reports & Security
             embed.add_field(
-                name="📺 Feeds & Alerts",
-                value="`/livealerts setup` `/livealerts add` `/livealerts list` | `/autonews setup` `/autonews reddit` `/autonews rss`",
-                inline=False
-            )
-
-            # Support Tickets
-            embed.add_field(
-                name="🎫 Support Tickets",
-                value="`/ticket setup` `/ticket panel` `/ticket add` `/ticket remove`",
-                inline=False
-            )
-
-            # Starboard & Auto-Thread
-            embed.add_field(
-                name="⭐ Starboard & Threads",
-                value="`/starboard setup` `/starboard threshold` `/starboard stats` | `/autothread setup` `/autothread disable` `/autothread list`",
-                inline=False
-            )
-
-            # Server Config & Reports
-            embed.add_field(
-                name="⚙️ Server Config & Reports",
-                value="`/serverconfig view` `/serverconfig toggle` `/serverconfig reset` | `/serverreports setup` `/serverreports now`",
-                inline=False
-            )
-
-            # Anti-Scam Security
-            embed.add_field(
-                name="🛡️ Anti-Scam Security",
-                value="`/antiscam enable` `/antiscam disable` `/antiscam settings` `/antiscam whitelist` `/antiscam logs`",
+                name="⚙️ Config & Security",
+                value="`/serverconfig view` `/serverconfig toggle` | `/serverreports setup` | `/antiscam enable` `/antiscam settings`",
                 inline=False
             )
 
@@ -247,14 +191,8 @@ class Help(commands.Cog):
 
         if is_owner:
             embed.add_field(
-                name="🔐 Logs",
-                value="`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs`",
-                inline=False
-            )
-
-            embed.add_field(
-                name="🖥️ System",
-                value="`/system health` `/system errors` `/system servers` `/system clear`",
+                name="🔐 Owner (Logs & System)",
+                value="`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs` | `/system health` `/system errors` `/system servers`",
                 inline=False
             )
 
