@@ -198,7 +198,7 @@ class Vault(commands.Cog):
         vault = vaults[vault_name]
 
         # Transfer coins (remove from user, add to vault)
-        remove_coins(interaction.guild.id, interaction.user.id, amount, "vault_deposit")
+        remove_coins(interaction.guild.id, interaction.user.id, amount)
         vault["balance"] += amount
         vault["total_deposited"] += amount
 
