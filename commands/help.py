@@ -123,6 +123,14 @@ class Help(commands.Cog):
             inline=False
         )
 
+        # Reputation Commands (Everyone)
+        rep_cmds = "`/rep` `/repcheck` `/repleaderboard`"
+        embed.add_field(
+            name="⭐ Reputation",
+            value=rep_cmds,
+            inline=False
+        )
+
         # Moderation Commands (Mods only)
         if is_mod or is_admin:
             mod_cmds = "`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`"

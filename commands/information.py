@@ -295,6 +295,29 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Reputation Commands (Everyone can use)
+    {
+        "name": "/rep",
+        "description": "Give a reputation point to a helpful member (1 per day)",
+        "usage": "/rep @user",
+        "category": "reputation",
+        "permission": None
+    },
+    {
+        "name": "/repcheck",
+        "description": "Check reputation points for yourself or another user",
+        "usage": "/repcheck or /repcheck @user",
+        "category": "reputation",
+        "permission": None
+    },
+    {
+        "name": "/repleaderboard",
+        "description": "View the most reputable members in the server",
+        "usage": "/repleaderboard or /repleaderboard page:2",
+        "category": "reputation",
+        "permission": None
+    },
+
     # Moderation Commands (Require specific permissions)
     {
         "name": "/moderationpanel",
@@ -514,6 +537,11 @@ CATEGORY_INFO = {
         "emoji": "📊",
         "description": "XP, levels, and rank cards"
     },
+    "reputation": {
+        "name": "Reputation Commands",
+        "emoji": "⭐",
+        "description": "Social recognition for helpful members"
+    },
     "moderation": {
         "name": "Moderation Commands",
         "emoji": "🛡️",
@@ -571,7 +599,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "moderation", "support", "admin", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "moderation", "support", "admin", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -771,6 +799,19 @@ class InformationView(View):
             inline=False
         )
 
+        # Reputation System (Everyone)
+        embed.add_field(
+            name="⭐ Reputation System",
+            value=(
+                "• **Give Rep** - Recognize helpful members with `/rep @user`\n"
+                "• **Daily Limit** - One rep point per day to prevent spam\n"
+                "• **Rep Leaderboard** - See who the most helpful members are\n"
+                "• **Check Rep** - View anyone's reputation stats\n"
+                "• **Social Recognition** - Build your server's community lore"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
@@ -875,6 +916,7 @@ class InformationView(View):
             "karaoke": discord.Color.magenta(),
             "achievements": discord.Color.from_rgb(255, 165, 0),  # Orange/Gold
             "leveling": discord.Color.from_rgb(88, 101, 242),  # Discord Blurple
+            "reputation": discord.Color.gold(),  # Gold for reputation
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),
             "owner": discord.Color.dark_red()
