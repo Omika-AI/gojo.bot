@@ -4,6 +4,7 @@ Displays a quick overview of all available bot commands organized by category
 Shows only commands the user has permission to use
 
 IMPORTANT: Update this file when adding new commands!
+NOTE: Discord embeds have a 25 field limit - keep categories consolidated!
 """
 
 import discord
@@ -67,158 +68,145 @@ class Help(commands.Cog):
         if self.bot.user:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
-        # General Commands (Everyone)
-        general_cmds = "`/help` `/ping` `/information` `/dq` `/67` `/start`"
+        # ==================== EVERYONE COMMANDS ====================
+
+        # General Commands
         embed.add_field(
             name="📌 General",
-            value=general_cmds,
+            value="`/help` `/ping` `/information` `/dq` `/67` `/start`",
             inline=False
         )
 
-        # Voice Channel Commands (Everyone)
-        vc_cmds = "`/tempvc panel` `/vcsignal` `/vclink`"
+        # Games & Fun
         embed.add_field(
-            name="🔊 Voice Channels",
-            value=vc_cmds,
+            name="🎮 Games & Fun",
+            value="`/trivia` `/minesweeper` `/connect4` `/tictactoe` `/rps` `/8ball` `/roll`",
             inline=False
         )
 
-        # Economy Commands (Everyone)
-        economy_cmds = "`/balance` `/claimdaily` `/leaderboard`"
+        # Profile & Reminders
         embed.add_field(
-            name="💰 Economy",
-            value=economy_cmds,
+            name="🎨 Profile & Reminders",
+            value="`/profile` `/profilecolor` `/profilepresets` `/remind` `/reminders`",
             inline=False
         )
 
-        # Gambling Commands (Everyone)
-        gambling_cmds = "`/blackjack` `/roulette` `/roulettenumber` `/roulettetable` `/coinflip` `/guessnumber`"
+        # Economy & Gambling
         embed.add_field(
-            name="🎰 Gambling",
-            value=gambling_cmds,
+            name="💰 Economy & Gambling",
+            value="`/balance` `/claimdaily` `/leaderboard` `/blackjack` `/roulette` `/roulettenumber` `/coinflip` `/guessnumber`",
             inline=False
         )
 
-        # Music Commands (Everyone)
-        music_cmds = "`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle` `/audiostatus`"
+        # Stock Market
         embed.add_field(
-            name="🔊 Music",
-            value=music_cmds,
+            name="📈 Stock Market",
+            value="`/invest` `/sell` `/portfolio` `/stockprice` `/stockmarket`",
             inline=False
         )
 
-        # Karaoke Commands (Everyone)
-        karaoke_cmds = "`/karaokelist` `/karaokesolo` `/karaokeduet` `/karaoke`"
+        # Shop & Quests
+        embed.add_field(
+            name="🛒 Shop & Quests",
+            value="`/shop` `/buy` `/inventory` `/quests` `/questkeys` `/lootbox` `/lootboxodds`",
+            inline=False
+        )
+
+        # Leveling & Achievements
+        embed.add_field(
+            name="📊 Leveling & Achievements",
+            value="`/rank` `/xpleaderboard` `/levels` `/achievements` `/achievementstats` `/rep` `/repcheck` `/repleaderboard`",
+            inline=False
+        )
+
+        # Music
+        embed.add_field(
+            name="🎵 Music",
+            value="`/play` `/addsong` `/playlist` `/queue` `/nowplaying` `/pause` `/resume` `/skip` `/stop` `/volume` `/shuffle`",
+            inline=False
+        )
+
+        # Karaoke
         embed.add_field(
             name="🎤 Karaoke",
-            value=karaoke_cmds,
+            value="`/karaokelist` `/karaokesolo` `/karaokeduet` `/karaoke`",
             inline=False
         )
 
-        # Achievement Commands (Everyone)
-        achievement_cmds = "`/achievements` `/achievementstats`"
+        # Voice Channels
         embed.add_field(
-            name="🏆 Achievements",
-            value=achievement_cmds,
+            name="🔊 Voice Channels",
+            value="`/tempvc panel` `/vcsignal` `/vclink`",
             inline=False
         )
 
-        # Leveling Commands (Everyone)
-        leveling_cmds = "`/rank` `/xpleaderboard` `/levels`"
-        embed.add_field(
-            name="📊 Leveling",
-            value=leveling_cmds,
-            inline=False
-        )
+        # ==================== MODERATOR COMMANDS ====================
 
-        # Reputation Commands (Everyone)
-        rep_cmds = "`/rep` `/repcheck` `/repleaderboard`"
-        embed.add_field(
-            name="⭐ Reputation",
-            value=rep_cmds,
-            inline=False
-        )
-
-        # Shop Commands (Everyone)
-        shop_cmds = "`/shop` `/buy` `/inventory`"
-        embed.add_field(
-            name="🛒 Shop",
-            value=shop_cmds,
-            inline=False
-        )
-
-        # Daily Quests Commands (Everyone)
-        quest_cmds = "`/quests` `/questkeys` `/lootbox` `/lootboxodds`"
-        embed.add_field(
-            name="Daily Quests",
-            value=quest_cmds,
-            inline=False
-        )
-
-        # Stock Market Commands (Everyone)
-        stock_cmds = "`/invest` `/sell` `/portfolio` `/stockprice` `/stockmarket`"
-        embed.add_field(
-            name="Stock Market",
-            value=stock_cmds,
-            inline=False
-        )
-
-        # Moderation Commands (Mods only)
         if is_mod or is_admin:
-            mod_cmds = "`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`"
             embed.add_field(
                 name="🛡️ Moderation",
-                value=mod_cmds,
+                value="`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`",
                 inline=False
             )
 
-        # Admin Commands (Admins only)
+        # ==================== ADMIN COMMANDS ====================
+
         if is_admin:
-            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/ultraoptimizemusic` `/backfill` `/syncstats` `/setup` `/dashboard`"
+            # Core Admin
             embed.add_field(
                 name="👑 Admin",
-                value=admin_cmds,
+                value="`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/setup` `/dashboard` `/backfill` `/syncstats`",
                 inline=False
             )
 
-            # Voice Channel Admin Commands
-            vc_admin_cmds = "`/tempvc setup` `/tempvc disable`"
+            # Giveaways & Polls
             embed.add_field(
-                name="🔊 Voice Admin",
-                value=vc_admin_cmds,
+                name="🎉 Giveaways & Polls",
+                value="`/giveaway start` `/giveaway end` `/giveaway reroll` `/giveaway list` | `/poll create` `/poll end` `/poll results`",
                 inline=False
             )
 
-            # Live Alerts Commands (Admins only)
-            live_cmds = "`/livealerts setup` `/livealerts add` `/livealerts remove` `/livealerts list` `/livealerts role`"
+            # Reaction Roles & Custom Commands
             embed.add_field(
-                name="📺 Live Alerts",
-                value=live_cmds,
+                name="🏷️ Roles & Custom Commands",
+                value="`/reactionrole create` `/reactionrole addrole` `/reactionrole list` | `/customcmd create` `/customcmd list`",
                 inline=False
             )
 
-            # Auto News Commands (Admins only)
-            news_cmds = "`/autonews setup` `/autonews reddit` `/autonews rss` `/autonews remove` `/autonews list`"
+            # Member Management (Welcome/Goodbye/Autorole)
             embed.add_field(
-                name="📰 Auto News",
-                value=news_cmds,
+                name="👋 Member Management",
+                value="`/welcome enable` `/welcome channel` `/welcome test` | `/goodbye enable` | `/autorole add` `/autorole list`",
                 inline=False
             )
 
-            # Support/Ticket Commands (Admins only)
-            support_cmds = "`/ticket setup` `/ticket panel` `/ticket add` `/ticket remove`"
+            # Voice & Language
+            embed.add_field(
+                name="🔊 Voice & Language",
+                value="`/tempvc setup` `/tempvc disable` | `/language set` `/language list` `/language preview`",
+                inline=False
+            )
+
+            # Feeds & Alerts
+            embed.add_field(
+                name="📺 Feeds & Alerts",
+                value="`/livealerts setup` `/livealerts add` `/livealerts list` | `/autonews setup` `/autonews reddit` `/autonews rss`",
+                inline=False
+            )
+
+            # Support Tickets
             embed.add_field(
                 name="🎫 Support Tickets",
-                value=support_cmds,
+                value="`/ticket setup` `/ticket panel` `/ticket add` `/ticket remove`",
                 inline=False
             )
 
-        # Owner Commands (Server Owner only)
+        # ==================== OWNER COMMANDS ====================
+
         if is_owner:
-            owner_cmds = "`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs`"
             embed.add_field(
                 name="🔐 Owner",
-                value=owner_cmds,
+                value="`/setuplogs` `/editlogs` `/searchlogs` `/logstats` `/clearlogs`",
                 inline=False
             )
 

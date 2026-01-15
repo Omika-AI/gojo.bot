@@ -75,6 +75,117 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Games Commands (Everyone can use)
+    {
+        "name": "/trivia",
+        "description": "Start a trivia game with various categories",
+        "usage": "/trivia category:general difficulty:medium",
+        "category": "games",
+        "permission": None
+    },
+    {
+        "name": "/minesweeper",
+        "description": "Generate a minesweeper game board",
+        "usage": "/minesweeper size:medium mines:10",
+        "category": "games",
+        "permission": None
+    },
+    {
+        "name": "/connect4",
+        "description": "Start a Connect 4 game against another player",
+        "usage": "/connect4 opponent:@user",
+        "category": "games",
+        "permission": None
+    },
+    {
+        "name": "/tictactoe",
+        "description": "Start a Tic Tac Toe game against another player",
+        "usage": "/tictactoe opponent:@user",
+        "category": "games",
+        "permission": None
+    },
+    {
+        "name": "/rps",
+        "description": "Play Rock Paper Scissors against the bot or a player",
+        "usage": "/rps choice:rock OR /rps opponent:@user",
+        "category": "games",
+        "permission": None
+    },
+    {
+        "name": "/8ball",
+        "description": "Ask the magic 8-ball a question",
+        "usage": "/8ball question:Will I win?",
+        "category": "games",
+        "permission": None
+    },
+    {
+        "name": "/roll",
+        "description": "Roll dice with custom notation",
+        "usage": "/roll dice:2d6 OR /roll dice:1d20+5",
+        "category": "games",
+        "permission": None
+    },
+
+    # Profile Commands (Everyone can use)
+    {
+        "name": "/profile",
+        "description": "View your graphical profile card with stats and badges",
+        "usage": "/profile OR /profile user:@someone",
+        "category": "profile",
+        "permission": None
+    },
+    {
+        "name": "/profilecolor",
+        "description": "Change your profile card accent color",
+        "usage": "/profilecolor color:#FF5733 OR /profilecolor preset:ocean",
+        "category": "profile",
+        "permission": None
+    },
+    {
+        "name": "/profilepresets",
+        "description": "View available profile color presets",
+        "usage": "/profilepresets",
+        "category": "profile",
+        "permission": None
+    },
+
+    # Reminder Commands (Everyone can use)
+    {
+        "name": "/remind",
+        "description": "Set a personal reminder (DMs you when time is up)",
+        "usage": "/remind time:1h message:Check the oven",
+        "category": "reminders",
+        "permission": None
+    },
+    {
+        "name": "/reminders",
+        "description": "View all your active reminders",
+        "usage": "/reminders",
+        "category": "reminders",
+        "permission": None
+    },
+    {
+        "name": "/reminder delete",
+        "description": "Delete a specific reminder by ID",
+        "usage": "/reminder delete reminder_id:123",
+        "category": "reminders",
+        "permission": None
+    },
+    {
+        "name": "/reminder clear",
+        "description": "Clear all your reminders",
+        "usage": "/reminder clear",
+        "category": "reminders",
+        "permission": None
+    },
+    {
+        "name": "/reminder info",
+        "description": "View details of a specific reminder",
+        "usage": "/reminder info reminder_id:123",
+        "category": "reminders",
+        "permission": None
+    },
+
     # Voice Channel Commands (Everyone can use)
     {
         "name": "/tempvc panel",
@@ -679,6 +790,323 @@ COMMANDS_REGISTRY = [
         "permission": "manage_messages"  # Staff only
     },
 
+    # Giveaway Commands (Require manage_guild)
+    {
+        "name": "/giveaway start",
+        "description": "Start a new giveaway with prize and duration",
+        "usage": "/giveaway start prize:Steam Key duration:1d winners:1",
+        "category": "giveaways",
+        "permission": "manage_guild"
+    },
+    {
+        "name": "/giveaway end",
+        "description": "End a giveaway early and pick winners",
+        "usage": "/giveaway end message_link:<message link>",
+        "category": "giveaways",
+        "permission": "manage_guild"
+    },
+    {
+        "name": "/giveaway reroll",
+        "description": "Reroll winners for a giveaway",
+        "usage": "/giveaway reroll message_link:<message link> count:1",
+        "category": "giveaways",
+        "permission": "manage_guild"
+    },
+    {
+        "name": "/giveaway list",
+        "description": "List all active giveaways in the server",
+        "usage": "/giveaway list",
+        "category": "giveaways",
+        "permission": "manage_guild"
+    },
+    {
+        "name": "/giveaway delete",
+        "description": "Delete a giveaway",
+        "usage": "/giveaway delete message_link:<message link>",
+        "category": "giveaways",
+        "permission": "manage_guild"
+    },
+
+    # Poll Commands (Require manage_messages)
+    {
+        "name": "/poll create",
+        "description": "Create a new poll with multiple options",
+        "usage": "/poll create question:Favorite color? options:Red | Blue | Green duration:1h",
+        "category": "polls",
+        "permission": "manage_messages"
+    },
+    {
+        "name": "/poll end",
+        "description": "End a poll early and show results",
+        "usage": "/poll end message_link:<message link>",
+        "category": "polls",
+        "permission": "manage_messages"
+    },
+    {
+        "name": "/poll results",
+        "description": "View current results of a poll",
+        "usage": "/poll results message_link:<message link>",
+        "category": "polls",
+        "permission": None
+    },
+    {
+        "name": "/poll delete",
+        "description": "Delete a poll",
+        "usage": "/poll delete message_link:<message link>",
+        "category": "polls",
+        "permission": "manage_messages"
+    },
+
+    # Reaction Role Commands (Require administrator)
+    {
+        "name": "/reactionrole create",
+        "description": "Create a new reaction role panel with buttons/dropdowns",
+        "usage": "/reactionrole create title:Roles description:Pick your roles type:buttons",
+        "category": "reactionroles",
+        "permission": "administrator"
+    },
+    {
+        "name": "/reactionrole addrole",
+        "description": "Add a role to a reaction role panel",
+        "usage": "/reactionrole addrole message_link:<link> role:@Role label:Click me",
+        "category": "reactionroles",
+        "permission": "administrator"
+    },
+    {
+        "name": "/reactionrole removerole",
+        "description": "Remove a role from a panel",
+        "usage": "/reactionrole removerole message_link:<link> role:@Role",
+        "category": "reactionroles",
+        "permission": "administrator"
+    },
+    {
+        "name": "/reactionrole delete",
+        "description": "Delete a reaction role panel",
+        "usage": "/reactionrole delete message_link:<link>",
+        "category": "reactionroles",
+        "permission": "administrator"
+    },
+    {
+        "name": "/reactionrole list",
+        "description": "List all reaction role panels in the server",
+        "usage": "/reactionrole list",
+        "category": "reactionroles",
+        "permission": "administrator"
+    },
+    {
+        "name": "/reactionrole mode",
+        "description": "Change panel mode (single/multiple selection)",
+        "usage": "/reactionrole mode message_link:<link> mode:single",
+        "category": "reactionroles",
+        "permission": "administrator"
+    },
+
+    # Custom Command Commands (Require administrator)
+    {
+        "name": "/customcmd create",
+        "description": "Create a custom command with trigger and response",
+        "usage": "/customcmd create trigger:hello response:Hello there!",
+        "category": "customcommands",
+        "permission": "administrator"
+    },
+    {
+        "name": "/customcmd delete",
+        "description": "Delete a custom command",
+        "usage": "/customcmd delete trigger:hello",
+        "category": "customcommands",
+        "permission": "administrator"
+    },
+    {
+        "name": "/customcmd edit",
+        "description": "Edit an existing custom command",
+        "usage": "/customcmd edit trigger:hello new_response:Hi there!",
+        "category": "customcommands",
+        "permission": "administrator"
+    },
+    {
+        "name": "/customcmd list",
+        "description": "List all custom commands",
+        "usage": "/customcmd list",
+        "category": "customcommands",
+        "permission": "administrator"
+    },
+    {
+        "name": "/customcmd info",
+        "description": "View details of a custom command",
+        "usage": "/customcmd info trigger:hello",
+        "category": "customcommands",
+        "permission": "administrator"
+    },
+    {
+        "name": "/customcmd prefix",
+        "description": "Set the trigger prefix for custom commands",
+        "usage": "/customcmd prefix prefix:!",
+        "category": "customcommands",
+        "permission": "administrator"
+    },
+
+    # Welcome Commands (Require administrator)
+    {
+        "name": "/welcome enable",
+        "description": "Enable or disable welcome messages",
+        "usage": "/welcome enable enabled:True",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+    {
+        "name": "/welcome channel",
+        "description": "Set the channel for welcome messages",
+        "usage": "/welcome channel channel:#welcome",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+    {
+        "name": "/welcome message",
+        "description": "Set the welcome message text",
+        "usage": "/welcome message message:Welcome {user} to {server}!",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+    {
+        "name": "/welcome image",
+        "description": "Enable or disable welcome card images",
+        "usage": "/welcome image enabled:True",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+    {
+        "name": "/welcome background",
+        "description": "Set custom background for welcome cards",
+        "usage": "/welcome background url:<image url>",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+    {
+        "name": "/welcome dm",
+        "description": "Configure DM welcome messages",
+        "usage": "/welcome dm enabled:True message:Welcome to our server!",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+    {
+        "name": "/welcome test",
+        "description": "Test the welcome card with yourself",
+        "usage": "/welcome test",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+    {
+        "name": "/welcome status",
+        "description": "View current welcome configuration",
+        "usage": "/welcome status",
+        "category": "welcome",
+        "permission": "administrator"
+    },
+
+    # Goodbye Commands (Require administrator)
+    {
+        "name": "/goodbye enable",
+        "description": "Enable or disable goodbye messages",
+        "usage": "/goodbye enable enabled:True",
+        "category": "goodbye",
+        "permission": "administrator"
+    },
+    {
+        "name": "/goodbye channel",
+        "description": "Set the channel for goodbye messages",
+        "usage": "/goodbye channel channel:#goodbye",
+        "category": "goodbye",
+        "permission": "administrator"
+    },
+    {
+        "name": "/goodbye message",
+        "description": "Set the goodbye message text",
+        "usage": "/goodbye message message:Goodbye {user}!",
+        "category": "goodbye",
+        "permission": "administrator"
+    },
+    {
+        "name": "/goodbye image",
+        "description": "Enable or disable goodbye card images",
+        "usage": "/goodbye image enabled:True",
+        "category": "goodbye",
+        "permission": "administrator"
+    },
+    {
+        "name": "/goodbye test",
+        "description": "Test the goodbye card with yourself",
+        "usage": "/goodbye test",
+        "category": "goodbye",
+        "permission": "administrator"
+    },
+
+    # Autorole Commands (Require administrator)
+    {
+        "name": "/autorole enable",
+        "description": "Enable or disable auto roles on join",
+        "usage": "/autorole enable enabled:True",
+        "category": "autorole",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autorole add",
+        "description": "Add a role to auto-assign on join",
+        "usage": "/autorole add role:@Member",
+        "category": "autorole",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autorole remove",
+        "description": "Remove a role from auto-assign",
+        "usage": "/autorole remove role:@Member",
+        "category": "autorole",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autorole list",
+        "description": "List all auto-assign roles",
+        "usage": "/autorole list",
+        "category": "autorole",
+        "permission": "administrator"
+    },
+    {
+        "name": "/autorole clear",
+        "description": "Remove all auto-assign roles",
+        "usage": "/autorole clear",
+        "category": "autorole",
+        "permission": "administrator"
+    },
+
+    # Language Commands (Require administrator)
+    {
+        "name": "/language set",
+        "description": "Set the server language for bot responses",
+        "usage": "/language set language:da",
+        "category": "language",
+        "permission": "administrator"
+    },
+    {
+        "name": "/language list",
+        "description": "List all available languages",
+        "usage": "/language list",
+        "category": "language",
+        "permission": None
+    },
+    {
+        "name": "/language current",
+        "description": "View the current server language",
+        "usage": "/language current",
+        "category": "language",
+        "permission": None
+    },
+    {
+        "name": "/language preview",
+        "description": "Preview how bot messages look in a language",
+        "usage": "/language preview language:da",
+        "category": "language",
+        "permission": None
+    },
+
     # Owner Commands (Server Owner only)
     {
         "name": "/clearlogs",
@@ -813,6 +1241,61 @@ CATEGORY_INFO = {
         "name": "Owner Commands",
         "emoji": "🔐",
         "description": "Exclusive commands for the server owner"
+    },
+    "games": {
+        "name": "Games Commands",
+        "emoji": "🎮",
+        "description": "Fun multiplayer and solo games"
+    },
+    "profile": {
+        "name": "Profile Commands",
+        "emoji": "🎨",
+        "description": "Customize and view your profile card"
+    },
+    "reminders": {
+        "name": "Reminder Commands",
+        "emoji": "⏰",
+        "description": "Set personal reminders that DM you"
+    },
+    "giveaways": {
+        "name": "Giveaway Commands",
+        "emoji": "🎉",
+        "description": "Create and manage server giveaways"
+    },
+    "polls": {
+        "name": "Poll Commands",
+        "emoji": "📊",
+        "description": "Create interactive polls with voting"
+    },
+    "reactionroles": {
+        "name": "Reaction Role Commands",
+        "emoji": "🏷️",
+        "description": "Self-assign roles with buttons/dropdowns"
+    },
+    "customcommands": {
+        "name": "Custom Command Commands",
+        "emoji": "⚡",
+        "description": "Create custom keyword responses"
+    },
+    "welcome": {
+        "name": "Welcome Commands",
+        "emoji": "👋",
+        "description": "Configure welcome messages and cards"
+    },
+    "goodbye": {
+        "name": "Goodbye Commands",
+        "emoji": "👋",
+        "description": "Configure goodbye messages and cards"
+    },
+    "autorole": {
+        "name": "Auto Role Commands",
+        "emoji": "🎭",
+        "description": "Auto-assign roles to new members"
+    },
+    "language": {
+        "name": "Language Commands",
+        "emoji": "🌍",
+        "description": "Set server language for bot responses"
     }
 }
 
@@ -851,7 +1334,13 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "shop", "quests", "stocks", "voicechannel", "moderation", "support", "admin", "livealerts", "autonews", "owner"]
+            cat for cat in [
+                "general", "fun", "games", "profile", "reminders", "economy", "gambling",
+                "music", "karaoke", "achievements", "leveling", "reputation", "shop",
+                "quests", "stocks", "voicechannel", "polls", "giveaways", "reactionroles",
+                "customcommands", "welcome", "goodbye", "autorole", "language",
+                "moderation", "support", "admin", "livealerts", "autonews", "owner"
+            ]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -1116,12 +1605,51 @@ class InformationView(View):
             inline=False
         )
 
+        # Games System (Everyone)
+        embed.add_field(
+            name="🎮 Games System",
+            value=(
+                "• **Trivia** - Test your knowledge with multiple categories\n"
+                "• **Minesweeper** - Classic puzzle game in Discord\n"
+                "• **Connect 4** - Challenge friends to a strategy game\n"
+                "• **Tic Tac Toe** - Classic X's and O's\n"
+                "• **Rock Paper Scissors** - Quick duels vs bot or players\n"
+                "• **8-Ball** - Ask the magic 8-ball anything\n"
+                "• **Dice Rolling** - Roll any combination of dice"
+            ),
+            inline=False
+        )
+
+        # Profile Cards (Everyone)
+        embed.add_field(
+            name="🎨 Profile Cards",
+            value=(
+                "• **Graphical Cards** - Beautiful profile cards with your stats\n"
+                "• **Custom Colors** - Choose your accent color or use presets\n"
+                "• **Stats Display** - Shows level, XP, coins, reputation\n"
+                "• **Achievement Badges** - Display your earned badges"
+            ),
+            inline=False
+        )
+
+        # Reminders (Everyone)
+        embed.add_field(
+            name="⏰ Personal Reminders",
+            value=(
+                "• **DM Reminders** - Get reminded via DM when time is up\n"
+                "• **Flexible Timing** - 1h, 30m, 1d, 1w, or combinations\n"
+                "• **Repeating Reminders** - Daily or weekly repeat options\n"
+                "• **Manage Reminders** - View, delete, or clear all reminders"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
-            name="🎮 Fun & Entertainment",
+            name="🎭 Fun & Entertainment",
             value=(
                 "• **Daily Quotes** - Inspirational quotes from movies, anime & famous people\n"
-                "• More fun features coming soon!"
+                "• **67 Command** - Unleash maximum cringe"
             ),
             inline=False
         )
@@ -1181,13 +1709,84 @@ class InformationView(View):
                 inline=False
             )
 
+            embed.add_field(
+                name="🎉 Giveaways & Polls",
+                value=(
+                    "• **Button Giveaways** - One-click entry with live count\n"
+                    "• **Timed Duration** - Auto-end after specified time\n"
+                    "• **Multiple Winners** - Pick 1 or more winners\n"
+                    "• **Role Requirements** - Require a role to enter\n"
+                    "• **Reroll Winners** - Pick new winners anytime\n"
+                    "• **Interactive Polls** - Button voting with live results"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="🏷️ Reaction Roles",
+                value=(
+                    "• **Button Panels** - Click to get/remove roles\n"
+                    "• **Dropdown Menus** - Select roles from a dropdown\n"
+                    "• **Single/Multi Mode** - Allow one or multiple roles\n"
+                    "• **Custom Labels** - Set button text and descriptions\n"
+                    "• **Emoji Support** - Add emojis to buttons"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="⚡ Custom Commands",
+                value=(
+                    "• **Keyword Triggers** - Auto-respond to specific words\n"
+                    "• **Custom Prefix** - Set your own trigger prefix\n"
+                    "• **Embed Responses** - Rich formatted responses\n"
+                    "• **Variables** - Use {user}, {server}, {channel} placeholders"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="👋 Welcome & Goodbye Cards",
+                value=(
+                    "• **Visual Cards** - Beautiful image welcome/goodbye cards\n"
+                    "• **Custom Backgrounds** - Set your own background image\n"
+                    "• **DM Welcomes** - Optional DM message to new members\n"
+                    "• **Auto Roles** - Automatically assign roles on join\n"
+                    "• **Custom Messages** - Use {user}, {server}, {count} variables"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="🌍 Multilingual Support",
+                value=(
+                    "• **13 Languages** - EN, DA, DE, ES, FR, PT, NL, IT, PL, RU, JA, KO, ZH\n"
+                    "• **Per-Server Language** - Each server picks their language\n"
+                    "• **Preview Mode** - See translations before switching\n"
+                    "• **Fallback System** - English fallback for missing translations"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="📝 Deep Logging",
+                value=(
+                    "• **Message Tracking** - Edits, deletions with content\n"
+                    "• **Member Events** - Joins, leaves, bans, unbans\n"
+                    "• **Role/Nick Changes** - Track all member updates\n"
+                    "• **Voice Activity** - Join, leave, move, mute/deafen\n"
+                    "• **Channel Updates** - Create, delete, modify channels"
+                ),
+                inline=False
+            )
+
         # Coming Soon
         embed.add_field(
             name="🚀 Coming Soon",
             value=(
                 "• AI Chat Features (OpenRouter integration)\n"
-                "• Auto-moderation\n"
-                "• Custom welcome messages\n"
+                "• Auto-moderation (word filters, spam protection)\n"
+                "• Social media alerts (Twitter, Instagram)\n"
                 "• And more!"
             ),
             inline=False
@@ -1250,6 +1849,9 @@ class InformationView(View):
         colors = {
             "general": discord.Color.blue(),
             "fun": discord.Color.gold(),
+            "games": discord.Color.from_rgb(114, 137, 218),  # Discord blurple for games
+            "profile": discord.Color.from_rgb(233, 30, 99),  # Pink for profile
+            "reminders": discord.Color.from_rgb(0, 188, 212),  # Cyan for reminders
             "economy": discord.Color.from_rgb(255, 215, 0),  # Gold
             "gambling": discord.Color.purple(),
             "music": discord.Color.green(),
@@ -1261,7 +1863,16 @@ class InformationView(View):
             "quests": discord.Color.from_rgb(255, 193, 7),  # Amber for quests
             "stocks": discord.Color.from_rgb(0, 200, 83),  # Green for stocks
             "voicechannel": discord.Color.from_rgb(87, 242, 135),  # Discord green for VC
+            "polls": discord.Color.from_rgb(63, 81, 181),  # Indigo for polls
+            "giveaways": discord.Color.from_rgb(255, 152, 0),  # Orange for giveaways
+            "reactionroles": discord.Color.from_rgb(156, 39, 176),  # Purple for reaction roles
+            "customcommands": discord.Color.from_rgb(255, 235, 59),  # Yellow for custom commands
+            "welcome": discord.Color.from_rgb(76, 175, 80),  # Green for welcome
+            "goodbye": discord.Color.from_rgb(121, 85, 72),  # Brown for goodbye
+            "autorole": discord.Color.from_rgb(103, 58, 183),  # Deep purple for autorole
+            "language": discord.Color.from_rgb(0, 150, 136),  # Teal for language
             "moderation": discord.Color.orange(),
+            "support": discord.Color.from_rgb(96, 125, 139),  # Blue grey for support
             "admin": discord.Color.red(),
             "livealerts": discord.Color.purple(),  # Purple for live alerts (Twitch)
             "autonews": discord.Color.from_rgb(255, 69, 0),  # Reddit orange
