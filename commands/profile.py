@@ -434,9 +434,9 @@ class Profile(commands.Cog):
                 )
                 return
 
-            # Purchase
-            from utils.economy_db import update_balance
-            update_balance(interaction.guild.id, interaction.user.id, -info["cost"])
+            # Purchase - remove coins from user
+            from utils.economy_db import remove_coins
+            remove_coins(interaction.guild.id, interaction.user.id, info["cost"])
 
             if "owned_banners" not in profile:
                 profile["owned_banners"] = ["default"]

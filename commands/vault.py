@@ -25,11 +25,11 @@ import os
 from datetime import datetime
 
 from utils.logger import logger
+from utils.economy_db import get_balance, add_coins, remove_coins
 
 # Database paths
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
 VAULT_FILE = os.path.join(DATA_DIR, 'vaults.json')
-ECONOMY_FILE = os.path.join(DATA_DIR, 'economy.json')
 
 
 def load_vault_data() -> dict:
@@ -49,41 +49,6 @@ def save_vault_data(data: dict):
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(VAULT_FILE, 'w') as f:
         json.dump(data, f, indent=2)
-
-
-def load_economy_data() -> dict:
-    """Load economy data"""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if os.path.exists(ECONOMY_FILE):
-        try:
-            with open(ECONOMY_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-
-def save_economy_data(data: dict):
-    """Save economy data"""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(ECONOMY_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
-
-
-def get_user_balance(user_id: int) -> int:
-    """Get user's coin balance"""
-    data = load_economy_data()
-    user_data = data.get(str(user_id), {})
-    return user_data.get("balance", 0)
-
-
-def update_user_balance(user_id: int, amount: int):
-    """Update user's coin balance"""
-    data = load_economy_data()
-    if str(user_id) not in data:
-        data[str(user_id)] = {"balance": 0}
-    data[str(user_id)]["balance"] = data[str(user_id)].get("balance", 0) + amount
-    save_economy_data(data)
 
 
 def get_guild_vaults(guild_id: int) -> dict:
@@ -220,8 +185,8 @@ class Vault(commands.Cog):
             )
             return
 
-        # Check user balance
-        balance = get_user_balance(interaction.user.id)
+        # Check user balance (using guild-aware economy system)
+        balance = get_balance(interaction.guild.id, interaction.user.id)
         if balance < amount:
             await interaction.response.send_message(
                 f"You only have **{balance:,}** coins! You can't deposit {amount:,}.",
@@ -232,8 +197,8 @@ class Vault(commands.Cog):
         vaults = get_guild_vaults(interaction.guild.id)
         vault = vaults[vault_name]
 
-        # Transfer coins
-        update_user_balance(interaction.user.id, -amount)
+        # Transfer coins (remove from user, add to vault)
+        remove_coins(interaction.guild.id, interaction.user.id, amount, "vault_deposit")
         vault["balance"] += amount
         vault["total_deposited"] += amount
 
@@ -312,9 +277,9 @@ class Vault(commands.Cog):
             )
             return
 
-        # Withdraw
+        # Withdraw (remove from vault, add to user)
         vault["balance"] -= amount
-        update_user_balance(interaction.user.id, amount)
+        add_coins(interaction.guild.id, interaction.user.id, amount, "vault_withdrawal")
         save_guild_vaults(interaction.guild.id, vaults)
 
         embed = discord.Embed(
