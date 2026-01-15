@@ -68,10 +68,18 @@ class Help(commands.Cog):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
         # General Commands (Everyone)
-        general_cmds = "`/help` `/ping` `/information` `/dq` `/67`"
+        general_cmds = "`/help` `/ping` `/information` `/dq` `/67` `/start`"
         embed.add_field(
             name="📌 General",
             value=general_cmds,
+            inline=False
+        )
+
+        # Voice Channel Commands (Everyone)
+        vc_cmds = "`/tempvc panel` `/vcsignal` `/vclink`"
+        embed.add_field(
+            name="🔊 Voice Channels",
+            value=vc_cmds,
             inline=False
         )
 
@@ -166,10 +174,18 @@ class Help(commands.Cog):
 
         # Admin Commands (Admins only)
         if is_admin:
-            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/ultraoptimizemusic` `/backfill` `/syncstats`"
+            admin_cmds = "`/adminprofile` `/webhook` `/webhookedit` `/givecoins` `/ultraoptimizemusic` `/backfill` `/syncstats` `/setup` `/dashboard`"
             embed.add_field(
                 name="👑 Admin",
                 value=admin_cmds,
+                inline=False
+            )
+
+            # Voice Channel Admin Commands
+            vc_admin_cmds = "`/tempvc setup` `/tempvc disable`"
+            embed.add_field(
+                name="🔊 Voice Admin",
+                value=vc_admin_cmds,
                 inline=False
             )
 

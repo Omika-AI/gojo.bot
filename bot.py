@@ -20,6 +20,16 @@ from utils.shop_db import has_active_xp_boost, get_expired_custom_roles, remove_
 from utils.live_alerts_db import get_all_guilds_with_streamers, get_alert_channel, get_mention_role, update_streamer_status, get_all_guilds_with_feeds, get_news_channel, update_feed_last_post
 from utils.quests_db import update_quest_progress
 from utils.stocks_db import record_member_activity
+from utils.tempvc_db import (
+    get_join_to_create_channel,
+    get_category_id,
+    create_temp_vc,
+    delete_temp_vc,
+    is_temp_vc,
+    get_default_name,
+    get_vc_owner,
+    transfer_ownership
+)
 import time
 import aiohttp
 
@@ -69,8 +79,71 @@ async def on_ready():
 
 @bot.event
 async def on_guild_join(guild: discord.Guild):
-    """Called when the bot joins a new server"""
+    """Called when the bot joins a new server - send welcome message"""
     logger.info(f"Joined new server: {guild.name} (ID: {guild.id})")
+
+    # Try to send a welcome message to the first available text channel
+    try:
+        # Import the welcome view
+        from commands.onboarding import WelcomeView
+
+        # Find a suitable channel to send the welcome message
+        target_channel = None
+
+        # First, try to find a "general", "welcome", or "bot" channel
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).send_messages:
+                name_lower = channel.name.lower()
+                if any(word in name_lower for word in ['general', 'welcome', 'bot', 'chat']):
+                    target_channel = channel
+                    break
+
+        # Fallback to the first channel we can send to
+        if not target_channel:
+            for channel in guild.text_channels:
+                if channel.permissions_for(guild.me).send_messages:
+                    target_channel = channel
+                    break
+
+        if target_channel:
+            embed = discord.Embed(
+                title=f"Thanks for adding {config.BOT_NAME}!",
+                description=(
+                    "I'm here to make your server more fun and engaging!\n\n"
+                    "**What I can do:**\n"
+                    "• Economy system with coins, gambling, and shops\n"
+                    "• Leveling with XP and rank cards\n"
+                    "• 50+ achievements to unlock\n"
+                    "• Music player with playlists\n"
+                    "• Daily quests and lootboxes\n"
+                    "• Community stock market\n"
+                    "• Moderation tools\n"
+                    "• And much more!"
+                ),
+                color=discord.Color.blue()
+            )
+
+            embed.add_field(
+                name="Get Started",
+                value=(
+                    "**Admins:** Use `/setup` to configure the bot\n"
+                    "**Everyone:** Use `/start` to learn the features\n"
+                    "**Commands:** Use `/help` to see all commands"
+                ),
+                inline=False
+            )
+
+            embed.set_footer(text=f"{config.BOT_NAME} v{config.BOT_VERSION}")
+
+            if bot.user:
+                embed.set_thumbnail(url=bot.user.display_avatar.url)
+
+            view = WelcomeView()
+            await target_channel.send(embed=embed, view=view)
+            logger.info(f"Sent welcome message to #{target_channel.name} in {guild.name}")
+
+    except Exception as e:
+        logger.error(f"Error sending welcome message to {guild.name}: {e}")
 
 
 @bot.event
@@ -165,12 +238,135 @@ async def on_message(message: discord.Message):
 
 @bot.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-    """Track voice channel time for achievements and XP"""
+    """Track voice channel time for achievements and XP, and handle temp VCs"""
     # Ignore bots
     if member.bot:
         return
 
     try:
+        # =============================================
+        # TEMP VC HANDLING
+        # =============================================
+
+        # Check if user joined the "Join to Create" channel
+        if after.channel is not None:
+            jtc_channel_id = get_join_to_create_channel(member.guild.id)
+
+            if jtc_channel_id and after.channel.id == jtc_channel_id:
+                # User joined the Join-to-Create channel - create a new temp VC
+                category_id = get_category_id(member.guild.id)
+                category = member.guild.get_channel(category_id) if category_id else None
+
+                if category:
+                    try:
+                        # Get default name template
+                        name_template = get_default_name(member.guild.id)
+                        channel_name = name_template.replace("{user}", member.display_name)
+
+                        # Create the new voice channel
+                        new_channel = await member.guild.create_voice_channel(
+                            name=channel_name,
+                            category=category,
+                            reason=f"Temp VC created for {member.display_name}"
+                        )
+
+                        # Give the owner permission to manage
+                        await new_channel.set_permissions(
+                            member,
+                            connect=True,
+                            speak=True,
+                            stream=True,
+                            mute_members=True,
+                            deafen_members=True,
+                            move_members=True
+                        )
+
+                        # Register in database
+                        create_temp_vc(member.guild.id, new_channel.id, member.id, channel_name)
+
+                        # Move the user to their new channel
+                        await member.move_to(new_channel)
+
+                        logger.info(f"[TEMP VC] Created '{channel_name}' for {member.name} in {member.guild.name}")
+
+                        # Send a welcome message via DM
+                        try:
+                            embed = discord.Embed(
+                                title="Your Voice Channel is Ready!",
+                                description=f"I've created **{channel_name}** for you!",
+                                color=discord.Color.green()
+                            )
+                            embed.add_field(
+                                name="Controls",
+                                value=(
+                                    "Use `/tempvc panel` to:\n"
+                                    "• Rename your channel\n"
+                                    "• Set a user limit\n"
+                                    "• Lock/unlock the channel\n"
+                                    "• Kick, allow, or ban users\n"
+                                    "• Transfer ownership"
+                                ),
+                                inline=False
+                            )
+                            embed.set_footer(text="The channel will be deleted when everyone leaves.")
+                            await member.send(embed=embed)
+                        except discord.Forbidden:
+                            pass  # Can't DM user
+
+                    except discord.Forbidden:
+                        logger.error(f"[TEMP VC] No permission to create VC in {member.guild.name}")
+                    except Exception as e:
+                        logger.error(f"[TEMP VC] Error creating temp VC: {e}")
+
+        # Check if a temp VC became empty (need to delete it)
+        if before.channel is not None:
+            if is_temp_vc(member.guild.id, before.channel.id):
+                # Check if the channel is now empty
+                if len(before.channel.members) == 0:
+                    try:
+                        # Delete from database
+                        delete_temp_vc(member.guild.id, before.channel.id)
+
+                        # Delete the Discord channel
+                        await before.channel.delete(reason="Temp VC empty - auto cleanup")
+                        logger.info(f"[TEMP VC] Deleted empty temp VC '{before.channel.name}' in {member.guild.name}")
+                    except discord.NotFound:
+                        # Channel already deleted
+                        delete_temp_vc(member.guild.id, before.channel.id)
+                    except discord.Forbidden:
+                        logger.error(f"[TEMP VC] No permission to delete VC in {member.guild.name}")
+                    except Exception as e:
+                        logger.error(f"[TEMP VC] Error deleting temp VC: {e}")
+
+                # Check if owner left - transfer ownership to next person
+                elif member.id == get_vc_owner(member.guild.id, before.channel.id):
+                    # Owner left but channel not empty - transfer to first remaining member
+                    remaining_members = [m for m in before.channel.members if not m.bot]
+                    if remaining_members:
+                        new_owner = remaining_members[0]
+                        transfer_ownership(member.guild.id, before.channel.id, new_owner.id)
+                        logger.info(f"[TEMP VC] Ownership transferred to {new_owner.name} in '{before.channel.name}'")
+
+                        # Notify new owner
+                        try:
+                            embed = discord.Embed(
+                                title="You're Now the Channel Owner!",
+                                description=f"The previous owner left, so you now control **{before.channel.name}**!",
+                                color=discord.Color.gold()
+                            )
+                            embed.add_field(
+                                name="Controls",
+                                value="Use `/tempvc panel` to manage your channel!",
+                                inline=False
+                            )
+                            await new_owner.send(embed=embed)
+                        except discord.Forbidden:
+                            pass
+
+        # =============================================
+        # XP & ACHIEVEMENTS TRACKING
+        # =============================================
+
         # User joined a voice channel
         if before.channel is None and after.channel is not None:
             # Store guild_id along with join time for XP tracking
@@ -210,7 +406,7 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
             logger.info(f"[VC SWITCH] {member.name} ({member.id}) moved from #{before.channel.name} to #{after.channel.name}")
 
     except Exception as e:
-        logger.error(f"Error tracking voice time: {e}")
+        logger.error(f"Error in voice state update: {e}")
 
 
 async def voice_xp_task():

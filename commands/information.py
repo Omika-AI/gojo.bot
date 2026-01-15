@@ -67,6 +67,36 @@ COMMANDS_REGISTRY = [
         "category": "fun",
         "permission": None
     },
+    {
+        "name": "/start",
+        "description": "Getting started guide for new users with interactive buttons",
+        "usage": "/start",
+        "category": "general",
+        "permission": None
+    },
+
+    # Voice Channel Commands (Everyone can use)
+    {
+        "name": "/tempvc panel",
+        "description": "Open control panel for your temporary voice channel",
+        "usage": "/tempvc panel",
+        "category": "voicechannel",
+        "permission": None
+    },
+    {
+        "name": "/vcsignal",
+        "description": "Send a private signal to invite a friend to your voice channel",
+        "usage": "/vcsignal user:@friend message:Join me!",
+        "category": "voicechannel",
+        "permission": None
+    },
+    {
+        "name": "/vclink",
+        "description": "Get a shareable info embed for your current voice channel",
+        "usage": "/vclink",
+        "category": "voicechannel",
+        "permission": None
+    },
 
     # Economy Commands (Everyone can use)
     {
@@ -516,6 +546,34 @@ COMMANDS_REGISTRY = [
         "category": "admin",
         "permission": "administrator"
     },
+    {
+        "name": "/setup",
+        "description": "Interactive setup wizard to configure all bot features",
+        "usage": "/setup",
+        "category": "admin",
+        "permission": "administrator"
+    },
+    {
+        "name": "/dashboard",
+        "description": "View server configuration status and quick overview",
+        "usage": "/dashboard",
+        "category": "admin",
+        "permission": "manage_guild"
+    },
+    {
+        "name": "/tempvc setup",
+        "description": "Set up Join-to-Create voice channels for the server",
+        "usage": "/tempvc setup channel:#join-vc category:#temp-vcs",
+        "category": "voicechannel",
+        "permission": "administrator"
+    },
+    {
+        "name": "/tempvc disable",
+        "description": "Disable the Join-to-Create voice channel system",
+        "usage": "/tempvc disable",
+        "category": "voicechannel",
+        "permission": "administrator"
+    },
 
     # Live Alerts Commands (Require administrator)
     {
@@ -721,6 +779,11 @@ CATEGORY_INFO = {
         "emoji": "",
         "description": "Invest in other members and profit from their activity"
     },
+    "voicechannel": {
+        "name": "Voice Channel Commands",
+        "emoji": "🔊",
+        "description": "Temporary voice channels and VC tools"
+    },
     "moderation": {
         "name": "Moderation Commands",
         "emoji": "🛡️",
@@ -788,7 +851,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "shop", "quests", "stocks", "moderation", "support", "admin", "livealerts", "autonews", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "reputation", "shop", "quests", "stocks", "voicechannel", "moderation", "support", "admin", "livealerts", "autonews", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -1040,12 +1103,37 @@ class InformationView(View):
             inline=False
         )
 
+        # Voice Channel Features (Everyone)
+        embed.add_field(
+            name="🔊 Voice Channel Tools",
+            value=(
+                "• **Join-to-Create** - Join a channel to get your own private VC\n"
+                "• **VC Controls** - Rename, lock, set limits, kick/ban users\n"
+                "• **Auto-Transfer** - Ownership transfers when owner leaves\n"
+                "• **VC Signal** - Send private invites to friends with `/vcsignal`\n"
+                "• **Auto-Delete** - Empty channels are automatically cleaned up"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
             value=(
                 "• **Daily Quotes** - Inspirational quotes from movies, anime & famous people\n"
                 "• More fun features coming soon!"
+            ),
+            inline=False
+        )
+
+        # Onboarding (Everyone)
+        embed.add_field(
+            name="🚀 Easy Onboarding",
+            value=(
+                "• **Interactive Start** - Use `/start` to learn all features\n"
+                "• **Setup Wizard** - Admins use `/setup` for easy configuration\n"
+                "• **Dashboard** - Quick overview with `/dashboard`\n"
+                "• **Welcome Message** - Auto-welcome when bot joins a server"
             ),
             inline=False
         )
@@ -1172,6 +1260,7 @@ class InformationView(View):
             "shop": discord.Color.teal(),  # Teal for shop
             "quests": discord.Color.from_rgb(255, 193, 7),  # Amber for quests
             "stocks": discord.Color.from_rgb(0, 200, 83),  # Green for stocks
+            "voicechannel": discord.Color.from_rgb(87, 242, 135),  # Discord green for VC
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),
             "livealerts": discord.Color.purple(),  # Purple for live alerts (Twitch)
