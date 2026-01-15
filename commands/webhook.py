@@ -1336,15 +1336,276 @@ class ReviewView(View):
 # COG
 # =============================================================================
 
+class WebhookMainView(View):
+    """Main view for webhook command - choose between create or edit"""
+
+    def __init__(self, user_id: int, bot: commands.Bot):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.bot = bot
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "This isn't your webhook menu!",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Create & Send Webhook", style=discord.ButtonStyle.success, emoji="✉️")
+    async def create_webhook(self, interaction: discord.Interaction, button: Button):
+        """Open the webhook builder to create and send messages"""
+        # Initialize builder state
+        state = WebhookBuilderState(
+            user_id=interaction.user.id,
+            channel_id=interaction.channel.id,
+            guild_id=interaction.guild.id
+        )
+        active_builders[interaction.user.id] = state
+
+        # Check for existing webhooks
+        webhooks = get_channel_webhooks(interaction.guild.id, interaction.channel.id)
+
+        embed = discord.Embed(
+            title="Webhook Message Builder",
+            description=(
+                "Create and send custom webhook messages with embeds!\n\n"
+                "**Step 1:** Select an existing webhook or create a new one.\n"
+                "**Step 2:** Configure your message content and profile.\n"
+                "**Step 3:** Add embeds with custom formatting.\n"
+                "**Step 4:** Preview and send!"
+            ),
+            color=discord.Color.blue()
+        )
+
+        if webhooks:
+            embed.add_field(
+                name="Existing Webhooks",
+                value=f"Found {len(webhooks)} webhook(s) in this channel.",
+                inline=False
+            )
+
+        await interaction.response.edit_message(
+            embed=embed,
+            view=WebhookSelectView(interaction.user.id, interaction.channel)
+        )
+
+    @discord.ui.button(label="Edit Existing Message", style=discord.ButtonStyle.primary, emoji="✏️")
+    async def edit_webhook(self, interaction: discord.Interaction, button: Button):
+        """Open prompt to edit an existing webhook message"""
+        embed = discord.Embed(
+            title="Edit Webhook Message",
+            description=(
+                "To edit an existing webhook message, I need the **message link**.\n\n"
+                "**How to get the link:**\n"
+                "1. Right-click on the webhook message\n"
+                "2. Click **Copy Message Link**\n"
+                "3. Paste it in the text box below"
+            ),
+            color=discord.Color.blue()
+        )
+
+        await interaction.response.edit_message(
+            embed=embed,
+            view=WebhookEditLinkView(interaction.user.id, self.bot)
+        )
+
+
+class WebhookEditLinkView(View):
+    """View for entering a message link to edit"""
+
+    def __init__(self, user_id: int, bot: commands.Bot):
+        super().__init__(timeout=120)
+        self.user_id = user_id
+        self.bot = bot
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "This isn't your webhook menu!",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Enter Message Link", style=discord.ButtonStyle.primary, emoji="🔗")
+    async def enter_link(self, interaction: discord.Interaction, button: Button):
+        """Open modal to enter message link"""
+        await interaction.response.send_modal(WebhookEditLinkModal(self.bot))
+
+    @discord.ui.button(label="Back", style=discord.ButtonStyle.secondary, emoji="⬅️")
+    async def back(self, interaction: discord.Interaction, button: Button):
+        """Go back to main menu"""
+        embed = discord.Embed(
+            title="Webhook Manager",
+            description="What would you like to do?",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="✉️ Create & Send",
+            value="Create a new webhook message with custom embeds",
+            inline=True
+        )
+        embed.add_field(
+            name="✏️ Edit Existing",
+            value="Edit a webhook message you've already sent",
+            inline=True
+        )
+
+        await interaction.response.edit_message(
+            embed=embed,
+            view=WebhookMainView(self.user_id, self.bot)
+        )
+
+
+class WebhookEditLinkModal(Modal):
+    """Modal for entering a webhook message link to edit"""
+
+    def __init__(self, bot: commands.Bot):
+        super().__init__(title="Edit Webhook Message")
+        self.bot = bot
+
+        self.message_link = TextInput(
+            label="Message Link",
+            placeholder="https://discord.com/channels/123/456/789",
+            required=True,
+            max_length=200
+        )
+        self.add_item(self.message_link)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Process the message link and open editor"""
+        link = self.message_link.value.strip()
+
+        # Parse the message link
+        pattern = re.compile(
+            r'https?://(?:(?:canary|ptb)\.)?discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)'
+        )
+        match = pattern.match(link)
+
+        if not match:
+            await interaction.response.send_message(
+                "Invalid message link! Please provide a valid Discord message link.\n"
+                "Example: `https://discord.com/channels/123456/789012/345678`",
+                ephemeral=True
+            )
+            return
+
+        guild_id = int(match.group(1))
+        channel_id = int(match.group(2))
+        message_id = int(match.group(3))
+
+        # Verify the message is from this guild
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message is from a different server!",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Get the channel
+            channel = interaction.guild.get_channel(channel_id)
+            if not channel:
+                await interaction.followup.send(
+                    "I couldn't find that channel. It may have been deleted or I don't have access.",
+                    ephemeral=True
+                )
+                return
+
+            # Fetch the message
+            try:
+                message = await channel.fetch_message(message_id)
+            except discord.NotFound:
+                await interaction.followup.send(
+                    "Message not found! It may have been deleted.",
+                    ephemeral=True
+                )
+                return
+
+            # Check if it's a webhook message
+            if not message.webhook_id:
+                await interaction.followup.send(
+                    "That message was not sent by a webhook! "
+                    "This command can only edit webhook messages.",
+                    ephemeral=True
+                )
+                return
+
+            # Get the webhooks in the channel
+            webhooks = await channel.webhooks()
+            webhook = None
+
+            for wh in webhooks:
+                if wh.id == message.webhook_id:
+                    webhook = wh
+                    break
+
+            if not webhook:
+                await interaction.followup.send(
+                    "The webhook that sent this message no longer exists! "
+                    "You cannot edit this message.",
+                    ephemeral=True
+                )
+                return
+
+            # Create edit state
+            from commands.webhookedit import WebhookEditState, WebhookEditView, active_editors
+
+            state = WebhookEditState(
+                user_id=interaction.user.id,
+                guild_id=interaction.guild.id,
+                channel_id=channel.id,
+                message_id=message.id,
+                webhook=webhook,
+                original_message=message
+            )
+            active_editors[interaction.user.id] = state
+
+            # Show the editor
+            embed = discord.Embed(
+                title="Webhook Message Editor",
+                description=(
+                    f"**Channel:** {channel.mention}\n"
+                    f"**Message ID:** {message.id}\n"
+                    f"**Webhook:** {webhook.name}\n\n"
+                    f"**Current Content:** {message.content[:200] + '...' if message.content and len(message.content) > 200 else message.content or '(empty)'}\n"
+                    f"**Embeds:** {len(message.embeds)}"
+                ),
+                color=discord.Color.blue()
+            )
+
+            await interaction.followup.send(
+                embed=embed,
+                view=WebhookEditView(state),
+                ephemeral=True
+            )
+
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "I don't have permission to access that channel or its webhooks!",
+                ephemeral=True
+            )
+        except Exception as e:
+            logger.error(f"Error in webhook edit: {e}")
+            await interaction.followup.send(
+                f"An error occurred: {e}",
+                ephemeral=True
+            )
+
+
 class Webhook(commands.Cog):
     """Webhook management commands"""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="webhook", description="Create and send webhook messages (Admin only)")
+    @app_commands.command(name="webhook", description="Create, send, or edit webhook messages (Admin only)")
     async def webhook(self, interaction: discord.Interaction):
-        """Open the webhook builder wizard"""
+        """Open the webhook manager"""
         log_command(
             user=str(interaction.user),
             user_id=interaction.user.id,
@@ -1376,39 +1637,26 @@ class Webhook(commands.Cog):
             )
             return
 
-        # Initialize builder state
-        state = WebhookBuilderState(
-            user_id=interaction.user.id,
-            channel_id=interaction.channel.id,
-            guild_id=interaction.guild.id
-        )
-        active_builders[interaction.user.id] = state
-
-        # Check for existing webhooks
-        webhooks = get_channel_webhooks(interaction.guild.id, interaction.channel.id)
-
+        # Show main menu with two options
         embed = discord.Embed(
-            title="Webhook Message Builder",
-            description=(
-                "Create and send custom webhook messages with embeds!\n\n"
-                "**Step 1:** Select an existing webhook or create a new one.\n"
-                "**Step 2:** Configure your message content and profile.\n"
-                "**Step 3:** Add embeds with custom formatting.\n"
-                "**Step 4:** Preview and send!"
-            ),
+            title="Webhook Manager",
+            description="What would you like to do?",
             color=discord.Color.blue()
         )
-
-        if webhooks:
-            embed.add_field(
-                name="Existing Webhooks",
-                value=f"Found {len(webhooks)} webhook(s) in this channel.",
-                inline=False
-            )
+        embed.add_field(
+            name="✉️ Create & Send",
+            value="Create a new webhook message with custom embeds",
+            inline=True
+        )
+        embed.add_field(
+            name="✏️ Edit Existing",
+            value="Edit a webhook message you've already sent",
+            inline=True
+        )
 
         await interaction.response.send_message(
             embed=embed,
-            view=WebhookSelectView(interaction.user.id, interaction.channel),
+            view=WebhookMainView(interaction.user.id, self.bot),
             ephemeral=True
         )
 

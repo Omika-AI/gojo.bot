@@ -1053,149 +1053,19 @@ class FieldSelectView(View):
 # COG
 # =============================================================================
 
-class WebhookEdit(commands.Cog):
-    """Webhook edit command"""
+# Note: The /webhookedit command has been merged into /webhook
+# This file is kept for the WebhookEditState and WebhookEditView classes
+# which are imported by webhook.py
+
+
+class WebhookEditCog(commands.Cog):
+    """Webhook edit utilities - command merged into /webhook"""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    @app_commands.command(name="webhookedit", description="Edit an existing webhook message (Admin only)")
-    @app_commands.describe(message_link="The Discord message link to edit")
-    async def webhookedit(self, interaction: discord.Interaction, message_link: str):
-        """Edit an existing webhook message"""
-        log_command(
-            user=str(interaction.user),
-            user_id=interaction.user.id,
-            command=f"webhookedit {message_link}",
-            guild=interaction.guild.name if interaction.guild else None
-        )
-
-        # Check if in a server
-        if not interaction.guild:
-            await interaction.response.send_message(
-                "This command can only be used in a server!",
-                ephemeral=True
-            )
-            return
-
-        # Check for Administrator permission
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "You need **Administrator** permission to use this command!",
-                ephemeral=True
-            )
-            return
-
-        # Parse the message link
-        parsed = parse_message_link(message_link)
-        if not parsed:
-            await interaction.response.send_message(
-                "Invalid message link! Please provide a valid Discord message link.\n"
-                "Example: `https://discord.com/channels/123456/789012/345678`",
-                ephemeral=True
-            )
-            return
-
-        # Verify the message is from this guild
-        if parsed["guild_id"] != interaction.guild.id:
-            await interaction.response.send_message(
-                "That message is from a different server!",
-                ephemeral=True
-            )
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        try:
-            # Get the channel
-            channel = interaction.guild.get_channel(parsed["channel_id"])
-            if not channel:
-                await interaction.followup.send(
-                    "I couldn't find that channel. It may have been deleted or I don't have access.",
-                    ephemeral=True
-                )
-                return
-
-            # Fetch the message
-            try:
-                message = await channel.fetch_message(parsed["message_id"])
-            except discord.NotFound:
-                await interaction.followup.send(
-                    "Message not found! It may have been deleted.",
-                    ephemeral=True
-                )
-                return
-
-            # Check if it's a webhook message
-            if not message.webhook_id:
-                await interaction.followup.send(
-                    "That message was not sent by a webhook! "
-                    "This command can only edit webhook messages.",
-                    ephemeral=True
-                )
-                return
-
-            # Get the webhooks in the channel
-            webhooks = await channel.webhooks()
-            webhook = None
-
-            for wh in webhooks:
-                if wh.id == message.webhook_id:
-                    webhook = wh
-                    break
-
-            if not webhook:
-                await interaction.followup.send(
-                    "The webhook that sent this message no longer exists! "
-                    "You cannot edit this message.",
-                    ephemeral=True
-                )
-                return
-
-            # Create edit state
-            state = WebhookEditState(
-                user_id=interaction.user.id,
-                guild_id=interaction.guild.id,
-                channel_id=channel.id,
-                message_id=message.id,
-                webhook=webhook,
-                original_message=message
-            )
-            active_editors[interaction.user.id] = state
-
-            # Show the editor
-            embed = discord.Embed(
-                title="Webhook Message Editor",
-                description=(
-                    f"**Channel:** {channel.mention}\n"
-                    f"**Message ID:** {message.id}\n"
-                    f"**Webhook:** {webhook.name}\n\n"
-                    f"**Current Content:** {message.content[:200] + '...' if message.content and len(message.content) > 200 else message.content or '(empty)'}\n"
-                    f"**Embeds:** {len(message.embeds)}"
-                ),
-                color=discord.Color.blue()
-            )
-
-            await interaction.followup.send(
-                embed=embed,
-                view=WebhookEditView(state),
-                ephemeral=True
-            )
-
-        except discord.Forbidden:
-            await interaction.followup.send(
-                "I don't have permission to access that channel or its webhooks!",
-                ephemeral=True
-            )
-        except Exception as e:
-            logger.error(f"Error in webhookedit: {e}")
-            await interaction.followup.send(
-                f"An error occurred: {e}",
-                ephemeral=True
-            )
 
 
 # Required setup function
 async def setup(bot: commands.Bot):
     """Add the WebhookEdit cog to the bot"""
-    await bot.add_cog(WebhookEdit(bot))
+    await bot.add_cog(WebhookEditCog(bot))
