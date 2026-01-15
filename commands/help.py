@@ -101,7 +101,7 @@ class Help(commands.Cog):
         # Vault (Shared Economy)
         embed.add_field(
             name="🏦 Vault & Stocks",
-            value="`/vault create` `/vault deposit` `/vault withdraw` `/vault info` `/vault join` `/vault list` | `/invest` `/sell` `/portfolio` `/stockprice`",
+            value="`/vault` | `/invest` `/sell` `/portfolio` `/stockprice`",
             inline=False
         )
 

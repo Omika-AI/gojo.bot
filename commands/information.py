@@ -1084,65 +1084,9 @@ COMMANDS_REGISTRY = [
 
     # Vault Commands (Everyone can use)
     {
-        "name": "/vault create",
-        "description": "Create a shared economy vault/club",
-        "usage": "/vault create name:savings description:Our savings vault public:true",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault deposit",
-        "description": "Deposit coins into your vault",
-        "usage": "/vault deposit amount:500",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault withdraw",
-        "description": "Withdraw coins from vault (leader only)",
-        "usage": "/vault withdraw amount:500 reason:Server event prize",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault info",
-        "description": "View vault information and progress",
-        "usage": "/vault info OR /vault info name:myvault",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault join",
-        "description": "Join a public vault",
-        "usage": "/vault join name:savings",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault leave",
-        "description": "Leave your current vault",
-        "usage": "/vault leave",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault list",
-        "description": "List all vaults in the server",
-        "usage": "/vault list",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault goal",
-        "description": "Set a savings goal for your vault (leader only)",
-        "usage": "/vault goal amount:10000 name:Server Nitro",
-        "category": "vault",
-        "permission": None
-    },
-    {
-        "name": "/vault members",
-        "description": "View vault members and their contributions",
-        "usage": "/vault members",
+        "name": "/vault",
+        "description": "Open the vault management panel (Create, Join, Deposit, Withdraw, View Info, Set Goals - all via buttons)",
+        "usage": "/vault",
         "category": "vault",
         "permission": None
     },

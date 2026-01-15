@@ -4,21 +4,13 @@ Vault System - Shared Economy Banks for Server Communities
 Let users create 'Vaults' or 'Clubs' where they can pool coins together
 for collective goals and server-wide perks.
 
-Commands:
-- /vault create - Create a new vault
-- /vault deposit - Deposit coins into a vault
-- /vault withdraw - Withdraw coins from vault (leaders only)
-- /vault info - View vault information
-- /vault members - View vault members
-- /vault join - Join a vault
-- /vault leave - Leave a vault
-- /vault list - List all vaults in the server
-- /vault goal - Set a savings goal
+Single command /vault opens a panel with all vault actions as buttons.
 """
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import View, Button, Modal, TextInput, Select
 from typing import Optional
 import json
 import os
@@ -79,81 +71,46 @@ def get_user_vault(guild_id: int, user_id: int) -> Optional[str]:
     return None
 
 
-class Vault(commands.Cog):
-    """Shared economy vault system"""
+# =============================================================================
+# MODALS
+# =============================================================================
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+class CreateVaultModal(Modal, title="Create a New Vault"):
+    """Modal for creating a vault"""
 
-    vault_group = app_commands.Group(
-        name="vault",
-        description="Manage shared economy vaults"
+    vault_name = TextInput(
+        label="Vault Name",
+        placeholder="e.g., savings-club (no spaces, max 20 chars)",
+        max_length=20,
+        required=True
     )
 
-    async def vault_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str
-    ) -> list[app_commands.Choice[str]]:
-        """Autocomplete for vault names - shows all vaults"""
-        vaults = get_guild_vaults(interaction.guild.id)
-        choices = []
-        for name, vault in vaults.items():
-            if current.lower() in name.lower():
-                member_count = len(vault.get("members", [])) + 1
-                balance = vault.get("balance", 0)
-                # Show vault name with balance info
-                display = f"{name.title()} ({balance:,} coins, {member_count} members)"
-                choices.append(app_commands.Choice(name=display[:100], value=name))
-        return choices[:25]  # Discord limit
-
-    async def public_vault_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str
-    ) -> list[app_commands.Choice[str]]:
-        """Autocomplete for public vaults only (for joining)"""
-        vaults = get_guild_vaults(interaction.guild.id)
-        choices = []
-        for name, vault in vaults.items():
-            # Only show public vaults
-            if not vault.get("public"):
-                continue
-            if current.lower() in name.lower():
-                member_count = len(vault.get("members", [])) + 1
-                balance = vault.get("balance", 0)
-                display = f"{name.title()} ({balance:,} coins, {member_count} members)"
-                choices.append(app_commands.Choice(name=display[:100], value=name))
-        return choices[:25]
-
-    @vault_group.command(name="create", description="Create a new vault")
-    @app_commands.describe(
-        name="Name for your vault (no spaces)",
-        description="Description of your vault's purpose",
-        public="Whether anyone can join (or invite-only)"
+    description = TextInput(
+        label="Description",
+        placeholder="What is this vault for?",
+        default="A shared vault",
+        max_length=100,
+        required=False
     )
-    async def vault_create(
-        self,
-        interaction: discord.Interaction,
-        name: str,
-        description: str = "A shared vault",
-        public: bool = True
-    ):
-        """Create a new vault"""
-        # Validate name
-        name = name.lower().replace(" ", "-")
-        if len(name) > 20:
-            await interaction.response.send_message(
-                "Vault name must be 20 characters or less!",
-                ephemeral=True
-            )
-            return
+
+    public = TextInput(
+        label="Public? (yes/no)",
+        placeholder="yes = anyone can join, no = invite only",
+        default="yes",
+        max_length=3,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.vault_name.value.lower().replace(" ", "-")
+        is_public = self.public.value.lower() in ["yes", "y", "true", "1"]
+        desc = self.description.value or "A shared vault"
 
         # Check if user is already in a vault
         current_vault = get_user_vault(interaction.guild.id, interaction.user.id)
         if current_vault:
             await interaction.response.send_message(
-                f"You're already in the **{current_vault}** vault! Leave first with `/vault leave`.",
+                f"You're already in the **{current_vault}** vault! Leave first.",
                 ephemeral=True
             )
             return
@@ -168,7 +125,7 @@ class Vault(commands.Cog):
             )
             return
 
-        # Check vault limit (max 10 per server)
+        # Check vault limit
         if len(vaults) >= 10:
             await interaction.response.send_message(
                 "This server has reached the maximum of 10 vaults!",
@@ -179,8 +136,8 @@ class Vault(commands.Cog):
         # Create vault
         vaults[name] = {
             "leader": interaction.user.id,
-            "description": description,
-            "public": public,
+            "description": desc,
+            "public": is_public,
             "balance": 0,
             "goal": 0,
             "goal_name": None,
@@ -198,49 +155,63 @@ class Vault(commands.Cog):
             color=discord.Color.green()
         )
         embed.add_field(name="Leader", value=interaction.user.mention, inline=True)
-        embed.add_field(name="Type", value="Public" if public else "Invite-only", inline=True)
-        embed.add_field(name="Description", value=description, inline=False)
-        embed.set_footer(text="Members can join with /vault join")
+        embed.add_field(name="Type", value="Public" if is_public else "Invite-only", inline=True)
+        embed.add_field(name="Description", value=desc, inline=False)
 
         await interaction.response.send_message(embed=embed)
         logger.info(f"Vault '{name}' created by {interaction.user} in {interaction.guild.name}")
 
-    @vault_group.command(name="deposit", description="Deposit coins into a vault")
-    @app_commands.describe(
-        vault="The vault to deposit into",
-        amount="Amount of coins to deposit"
-    )
-    @app_commands.autocomplete(vault=vault_autocomplete)
-    async def vault_deposit(
-        self,
-        interaction: discord.Interaction,
-        vault: str,
-        amount: app_commands.Range[int, 1, 1000000]
-    ):
-        """Deposit coins into vault"""
-        vault_name = vault.lower()
-        vaults = get_guild_vaults(interaction.guild.id)
 
-        # Check if vault exists
-        if vault_name not in vaults:
+class DepositModal(Modal, title="Deposit Coins"):
+    """Modal for depositing coins"""
+
+    vault_name = TextInput(
+        label="Vault Name",
+        placeholder="Enter the vault name",
+        required=True
+    )
+
+    amount = TextInput(
+        label="Amount",
+        placeholder="How many coins to deposit?",
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        vault_name = self.vault_name.value.lower()
+
+        try:
+            amount = int(self.amount.value.replace(",", ""))
+            if amount <= 0:
+                raise ValueError()
+        except ValueError:
             await interaction.response.send_message(
-                f"Vault **{vault_name}** not found! Use `/vault list` to see available vaults.",
+                "Please enter a valid positive number!",
                 ephemeral=True
             )
             return
 
-        # Check user balance (using guild-aware economy system)
+        vaults = get_guild_vaults(interaction.guild.id)
+
+        if vault_name not in vaults:
+            await interaction.response.send_message(
+                f"Vault **{vault_name}** not found!",
+                ephemeral=True
+            )
+            return
+
+        # Check user balance
         balance = get_balance(interaction.guild.id, interaction.user.id)
         if balance < amount:
             await interaction.response.send_message(
-                f"You only have **{balance:,}** coins! You can't deposit {amount:,}.",
+                f"You only have **{balance:,}** coins!",
                 ephemeral=True
             )
             return
 
         vault_data = vaults[vault_name]
 
-        # Transfer coins (remove from user, add to vault)
+        # Transfer coins
         remove_coins(interaction.guild.id, interaction.user.id, amount)
         vault_data["balance"] += amount
         vault_data["total_deposited"] += amount
@@ -259,9 +230,9 @@ class Vault(commands.Cog):
             color=discord.Color.green()
         )
         embed.add_field(name="Vault Balance", value=f"{vault_data['balance']:,} coins", inline=True)
-        embed.add_field(name="Your Total Contribution", value=f"{vault_data['contributions'][user_key]:,} coins", inline=True)
+        embed.add_field(name="Your Contribution", value=f"{vault_data['contributions'][user_key]:,} coins", inline=True)
 
-        # Check goal progress
+        # Goal progress
         if vault_data.get("goal") and vault_data["goal"] > 0:
             progress = (vault_data["balance"] / vault_data["goal"]) * 100
             goal_bar = "█" * int(progress // 10) + "░" * (10 - int(progress // 10))
@@ -272,27 +243,80 @@ class Vault(commands.Cog):
                 inline=False
             )
 
-            if vault_data["balance"] >= vault_data["goal"]:
-                embed.add_field(
-                    name="🎉 GOAL REACHED!",
-                    value="Congratulations! The vault has reached its goal!",
-                    inline=False
-                )
+        await interaction.response.send_message(embed=embed)
+
+
+class JoinVaultModal(Modal, title="Join a Vault"):
+    """Modal for joining a vault"""
+
+    vault_name = TextInput(
+        label="Vault Name",
+        placeholder="Enter the vault name to join",
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Check if already in a vault
+        current = get_user_vault(interaction.guild.id, interaction.user.id)
+        if current:
+            await interaction.response.send_message(
+                f"You're already in **{current}**! Leave first.",
+                ephemeral=True
+            )
+            return
+
+        vault_name = self.vault_name.value.lower()
+        vaults = get_guild_vaults(interaction.guild.id)
+        vault_data = vaults.get(vault_name)
+
+        if not vault_data:
+            await interaction.response.send_message(
+                f"Vault **{vault_name}** not found!",
+                ephemeral=True
+            )
+            return
+
+        if not vault_data.get("public"):
+            await interaction.response.send_message(
+                "This vault is invite-only!",
+                ephemeral=True
+            )
+            return
+
+        # Add member
+        if "members" not in vault_data:
+            vault_data["members"] = []
+        vault_data["members"].append(interaction.user.id)
+        save_guild_vaults(interaction.guild.id, vaults)
+
+        embed = discord.Embed(
+            title="🎉 Welcome to the Vault!",
+            description=f"You've joined **{vault_name}**!",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Balance", value=f"{vault_data['balance']:,} coins", inline=True)
+        embed.add_field(name="Members", value=str(len(vault_data["members"]) + 1), inline=True)
 
         await interaction.response.send_message(embed=embed)
 
-    @vault_group.command(name="withdraw", description="Withdraw coins from the vault (Leader only)")
-    @app_commands.describe(
-        amount="Amount to withdraw",
-        reason="Reason for withdrawal"
+
+class WithdrawModal(Modal, title="Withdraw Coins"):
+    """Modal for withdrawing coins (leader only)"""
+
+    amount = TextInput(
+        label="Amount",
+        placeholder="How many coins to withdraw?",
+        required=True
     )
-    async def vault_withdraw(
-        self,
-        interaction: discord.Interaction,
-        amount: app_commands.Range[int, 1, 1000000],
-        reason: str = "No reason provided"
-    ):
-        """Withdraw from vault (leader only)"""
+
+    reason = TextInput(
+        label="Reason",
+        placeholder="Why are you withdrawing?",
+        default="No reason provided",
+        required=False
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
         vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
         if not vault_name:
             await interaction.response.send_message(
@@ -304,15 +328,24 @@ class Vault(commands.Cog):
         vaults = get_guild_vaults(interaction.guild.id)
         vault = vaults[vault_name]
 
-        # Check if leader
         if vault["leader"] != interaction.user.id:
             await interaction.response.send_message(
-                "Only the vault leader can withdraw coins!",
+                "Only the vault leader can withdraw!",
                 ephemeral=True
             )
             return
 
-        # Check vault balance
+        try:
+            amount = int(self.amount.value.replace(",", ""))
+            if amount <= 0:
+                raise ValueError()
+        except ValueError:
+            await interaction.response.send_message(
+                "Please enter a valid positive number!",
+                ephemeral=True
+            )
+            return
+
         if vault["balance"] < amount:
             await interaction.response.send_message(
                 f"The vault only has **{vault['balance']:,}** coins!",
@@ -320,7 +353,7 @@ class Vault(commands.Cog):
             )
             return
 
-        # Withdraw (remove from vault, add to user)
+        # Withdraw
         vault["balance"] -= amount
         add_coins(interaction.guild.id, interaction.user.id, amount, "vault_withdrawal")
         save_guild_vaults(interaction.guild.id, vaults)
@@ -330,39 +363,183 @@ class Vault(commands.Cog):
             description=f"**{amount:,}** coins withdrawn from **{vault_name}**",
             color=discord.Color.orange()
         )
-        embed.add_field(name="Reason", value=reason, inline=False)
-        embed.add_field(name="Remaining Balance", value=f"{vault['balance']:,} coins", inline=True)
-        embed.set_footer(text="All members can see this withdrawal")
+        embed.add_field(name="Reason", value=self.reason.value or "No reason provided", inline=False)
+        embed.add_field(name="Remaining", value=f"{vault['balance']:,} coins", inline=True)
 
         await interaction.response.send_message(embed=embed)
-        logger.info(f"Vault withdrawal: {amount} from {vault_name} by {interaction.user}")
 
-    @vault_group.command(name="info", description="View vault information")
-    @app_commands.describe(name="Vault name (leave empty for your vault)")
-    async def vault_info(
-        self,
-        interaction: discord.Interaction,
-        name: Optional[str] = None
-    ):
-        """View vault info"""
-        if name:
-            vault_name = name.lower()
-        else:
-            vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
-            if not vault_name:
-                await interaction.response.send_message(
-                    "You're not in a vault! Specify a vault name or join one.",
-                    ephemeral=True
-                )
-                return
 
-        vault = get_vault(interaction.guild.id, vault_name)
-        if not vault:
+class SetGoalModal(Modal, title="Set Savings Goal"):
+    """Modal for setting a vault goal (leader only)"""
+
+    amount = TextInput(
+        label="Goal Amount",
+        placeholder="Target amount to save (e.g., 10000)",
+        required=True
+    )
+
+    goal_name = TextInput(
+        label="Goal Name",
+        placeholder="What are you saving for?",
+        default="Savings Goal",
+        required=False
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
+        if not vault_name:
             await interaction.response.send_message(
-                f"Vault **{vault_name}** not found!",
+                "You're not in a vault!",
                 ephemeral=True
             )
             return
+
+        vaults = get_guild_vaults(interaction.guild.id)
+        vault = vaults[vault_name]
+
+        if vault["leader"] != interaction.user.id:
+            await interaction.response.send_message(
+                "Only the vault leader can set goals!",
+                ephemeral=True
+            )
+            return
+
+        try:
+            amount = int(self.amount.value.replace(",", ""))
+            if amount < 100:
+                raise ValueError()
+        except ValueError:
+            await interaction.response.send_message(
+                "Please enter a valid number (minimum 100)!",
+                ephemeral=True
+            )
+            return
+
+        vault["goal"] = amount
+        vault["goal_name"] = self.goal_name.value or "Savings Goal"
+        save_guild_vaults(interaction.guild.id, vaults)
+
+        progress = (vault["balance"] / amount) * 100
+        goal_bar = "█" * int(progress // 10) + "░" * (10 - int(progress // 10))
+
+        embed = discord.Embed(
+            title="🎯 Goal Set!",
+            description=f"**{vault_name}** is now saving for: **{vault['goal_name']}**",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="Progress",
+            value=f"`{goal_bar}` {progress:.1f}%\n{vault['balance']:,} / {amount:,} coins",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed)
+
+
+# =============================================================================
+# MAIN VAULT PANEL VIEW
+# =============================================================================
+
+class VaultPanelView(View):
+    """Main vault panel with all actions"""
+
+    def __init__(self, user_id: int, guild_id: int):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.user_vault = get_user_vault(guild_id, user_id)
+
+        # Check if user is a vault leader
+        self.is_leader = False
+        if self.user_vault:
+            vault = get_vault(guild_id, self.user_vault)
+            if vault and vault.get("leader") == user_id:
+                self.is_leader = True
+
+        # Add leader-only buttons if applicable
+        if self.is_leader:
+            withdraw_btn = Button(label="Withdraw", style=discord.ButtonStyle.danger, emoji="💸", row=2)
+            withdraw_btn.callback = self.withdraw_callback
+            self.add_item(withdraw_btn)
+
+            goal_btn = Button(label="Set Goal", style=discord.ButtonStyle.primary, emoji="🎯", row=2)
+            goal_btn.callback = self.set_goal_callback
+            self.add_item(goal_btn)
+
+            members_btn = Button(label="Members", style=discord.ButtonStyle.secondary, emoji="👥", row=2)
+            members_btn.callback = self.members_callback
+            self.add_item(members_btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "This panel isn't for you! Use `/vault` to open your own.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    # Leader-only callbacks
+    async def withdraw_callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(WithdrawModal())
+
+    async def set_goal_callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(SetGoalModal())
+
+    async def members_callback(self, interaction: discord.Interaction):
+        vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
+        if not vault_name:
+            await interaction.response.send_message("You're not in a vault!", ephemeral=True)
+            return
+
+        vault = get_vault(interaction.guild.id, vault_name)
+
+        embed = discord.Embed(
+            title=f"👥 {vault_name.title()} Members",
+            color=discord.Color.blue()
+        )
+
+        # Leader
+        leader = interaction.guild.get_member(vault["leader"])
+        leader_contrib = vault.get("contributions", {}).get(str(vault["leader"]), 0)
+        leader_text = f"👑 **{leader.display_name if leader else 'Unknown'}** (Leader)\n"
+        leader_text += f"   Contributed: {leader_contrib:,} coins"
+        embed.add_field(name="Leader", value=leader_text, inline=False)
+
+        # Members
+        if vault.get("members"):
+            member_text = []
+            for uid in vault["members"]:
+                member = interaction.guild.get_member(uid)
+                name = member.display_name if member else "Unknown"
+                contrib = vault.get("contributions", {}).get(str(uid), 0)
+                member_text.append(f"• **{name}** - {contrib:,} coins")
+            embed.add_field(
+                name=f"Members ({len(vault['members'])})",
+                value="\n".join(member_text[:10]),
+                inline=False
+            )
+        else:
+            embed.add_field(name="Members", value="No other members yet!", inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # Row 0: Main actions
+    @discord.ui.button(label="Create Vault", style=discord.ButtonStyle.success, emoji="🏦", row=0)
+    async def create_button(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(CreateVaultModal())
+
+    @discord.ui.button(label="My Vault", style=discord.ButtonStyle.primary, emoji="📊", row=0)
+    async def my_vault_button(self, interaction: discord.Interaction, button: Button):
+        vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
+        if not vault_name:
+            await interaction.response.send_message(
+                "You're not in a vault! Use **Create Vault** or **Join Vault** to get started.",
+                ephemeral=True
+            )
+            return
+
+        vault = get_vault(interaction.guild.id, vault_name)
 
         # Get leader info
         leader = interaction.guild.get_member(vault["leader"])
@@ -409,122 +586,19 @@ class Vault(commands.Cog):
                 inline=False
             )
 
-        # Created date
-        if vault.get("created_at"):
-            created = datetime.fromisoformat(vault["created_at"])
-            embed.set_footer(text=f"Created {created.strftime('%B %d, %Y')}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        await interaction.response.send_message(embed=embed)
+    @discord.ui.button(label="Deposit", style=discord.ButtonStyle.success, emoji="💰", row=0)
+    async def deposit_button(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(DepositModal())
 
-    @vault_group.command(name="join", description="Join a public vault")
-    @app_commands.describe(vault="The vault to join")
-    @app_commands.autocomplete(vault=public_vault_autocomplete)
-    async def vault_join(
-        self,
-        interaction: discord.Interaction,
-        vault: str
-    ):
-        """Join a vault"""
-        # Check if already in a vault
-        current = get_user_vault(interaction.guild.id, interaction.user.id)
-        if current:
-            await interaction.response.send_message(
-                f"You're already in **{current}**! Leave first with `/vault leave`.",
-                ephemeral=True
-            )
-            return
-
-        vault_name = vault.lower()
-        vaults = get_guild_vaults(interaction.guild.id)
-        vault_data = vaults.get(vault_name)
-
-        if not vault_data:
-            await interaction.response.send_message(
-                f"Vault **{vault_name}** not found! Use `/vault list` to see available vaults.",
-                ephemeral=True
-            )
-            return
-
-        if not vault_data.get("public"):
-            await interaction.response.send_message(
-                "This vault is invite-only!",
-                ephemeral=True
-            )
-            return
-
-        # Add member
-        if "members" not in vault_data:
-            vault_data["members"] = []
-        vault_data["members"].append(interaction.user.id)
-        save_guild_vaults(interaction.guild.id, vaults)
-
-        embed = discord.Embed(
-            title="🎉 Welcome to the Vault!",
-            description=f"You've joined **{vault_name}**!",
-            color=discord.Color.green()
-        )
-        embed.add_field(name="Current Balance", value=f"{vault_data['balance']:,} coins", inline=True)
-        embed.add_field(name="Members", value=str(len(vault_data["members"]) + 1), inline=True)
-        embed.set_footer(text="Use /vault deposit to contribute!")
-
-        await interaction.response.send_message(embed=embed)
-
-    @vault_group.command(name="leave", description="Leave your current vault")
-    async def vault_leave(self, interaction: discord.Interaction):
-        """Leave vault"""
-        vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
-        if not vault_name:
-            await interaction.response.send_message(
-                "You're not in a vault!",
-                ephemeral=True
-            )
-            return
-
-        vaults = get_guild_vaults(interaction.guild.id)
-        vault = vaults[vault_name]
-
-        # Check if leader
-        if vault["leader"] == interaction.user.id:
-            # If there are other members, transfer leadership
-            if vault.get("members") and len(vault["members"]) > 0:
-                new_leader = vault["members"][0]
-                vault["leader"] = new_leader
-                vault["members"].remove(new_leader)
-                new_leader_member = interaction.guild.get_member(new_leader)
-                new_leader_name = new_leader_member.display_name if new_leader_member else "Unknown"
-
-                save_guild_vaults(interaction.guild.id, vaults)
-
-                await interaction.response.send_message(
-                    f"You've left **{vault_name}**. Leadership transferred to **{new_leader_name}**.",
-                    ephemeral=True
-                )
-            else:
-                # Delete the vault if no members
-                del vaults[vault_name]
-                save_guild_vaults(interaction.guild.id, vaults)
-
-                await interaction.response.send_message(
-                    f"You've left and **{vault_name}** has been dissolved (no remaining members).",
-                    ephemeral=True
-                )
-        else:
-            vault["members"].remove(interaction.user.id)
-            save_guild_vaults(interaction.guild.id, vaults)
-
-            await interaction.response.send_message(
-                f"You've left **{vault_name}**.",
-                ephemeral=True
-            )
-
-    @vault_group.command(name="list", description="List all vaults in this server")
-    async def vault_list(self, interaction: discord.Interaction):
-        """List all vaults"""
+    @discord.ui.button(label="Vault List", style=discord.ButtonStyle.secondary, emoji="📋", row=0)
+    async def list_button(self, interaction: discord.Interaction, button: Button):
         vaults = get_guild_vaults(interaction.guild.id)
 
         if not vaults:
             await interaction.response.send_message(
-                "No vaults exist in this server yet! Create one with `/vault create`.",
+                "No vaults exist in this server yet! Click **Create Vault** to make one.",
                 ephemeral=True
             )
             return
@@ -550,21 +624,15 @@ class Vault(commands.Cog):
                 inline=True
             )
 
-        embed.set_footer(text="Use /vault join <name> to join a public vault")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @vault_group.command(name="goal", description="Set a savings goal for your vault")
-    @app_commands.describe(
-        amount="Target amount to save",
-        name="Name for the goal (e.g., 'Server Nitro')"
-    )
-    async def vault_goal(
-        self,
-        interaction: discord.Interaction,
-        amount: app_commands.Range[int, 100, 10000000],
-        name: str = "Savings Goal"
-    ):
-        """Set vault goal"""
+    # Row 1: Join/Leave
+    @discord.ui.button(label="Join Vault", style=discord.ButtonStyle.primary, emoji="🚪", row=1)
+    async def join_button(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(JoinVaultModal())
+
+    @discord.ui.button(label="Leave Vault", style=discord.ButtonStyle.danger, emoji="🚶", row=1)
+    async def leave_button(self, interaction: discord.Interaction, button: Button):
         vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
         if not vault_name:
             await interaction.response.send_message(
@@ -577,78 +645,85 @@ class Vault(commands.Cog):
         vault = vaults[vault_name]
 
         # Check if leader
-        if vault["leader"] != interaction.user.id:
+        if vault["leader"] == interaction.user.id:
+            if vault.get("members") and len(vault["members"]) > 0:
+                new_leader = vault["members"][0]
+                vault["leader"] = new_leader
+                vault["members"].remove(new_leader)
+                new_leader_member = interaction.guild.get_member(new_leader)
+                new_leader_name = new_leader_member.display_name if new_leader_member else "Unknown"
+
+                save_guild_vaults(interaction.guild.id, vaults)
+
+                await interaction.response.send_message(
+                    f"You've left **{vault_name}**. Leadership transferred to **{new_leader_name}**.",
+                    ephemeral=True
+                )
+            else:
+                del vaults[vault_name]
+                save_guild_vaults(interaction.guild.id, vaults)
+
+                await interaction.response.send_message(
+                    f"You've left and **{vault_name}** has been dissolved (no remaining members).",
+                    ephemeral=True
+                )
+        else:
+            vault["members"].remove(interaction.user.id)
+            save_guild_vaults(interaction.guild.id, vaults)
+
             await interaction.response.send_message(
-                "Only the vault leader can set goals!",
+                f"You've left **{vault_name}**.",
                 ephemeral=True
             )
-            return
 
-        vault["goal"] = amount
-        vault["goal_name"] = name
-        save_guild_vaults(interaction.guild.id, vaults)
 
-        progress = (vault["balance"] / amount) * 100
-        goal_bar = "█" * int(progress // 10) + "░" * (10 - int(progress // 10))
+# =============================================================================
+# COG
+# =============================================================================
 
-        embed = discord.Embed(
-            title="🎯 Goal Set!",
-            description=f"**{vault_name}** is now saving for: **{name}**",
-            color=discord.Color.blue()
-        )
-        embed.add_field(
-            name="Progress",
-            value=f"`{goal_bar}` {progress:.1f}%\n{vault['balance']:,} / {amount:,} coins",
-            inline=False
-        )
-        embed.set_footer(text="All members can contribute!")
+class Vault(commands.Cog):
+    """Shared economy vault system"""
 
-        await interaction.response.send_message(embed=embed)
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
 
-    @vault_group.command(name="members", description="View vault members and their contributions")
-    async def vault_members(self, interaction: discord.Interaction):
-        """View vault members"""
-        vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
-        if not vault_name:
-            await interaction.response.send_message(
-                "You're not in a vault!",
-                ephemeral=True
-            )
-            return
-
-        vault = get_vault(interaction.guild.id, vault_name)
+    @app_commands.command(name="vault", description="Open the vault management panel")
+    async def vault(self, interaction: discord.Interaction):
+        """Open the vault panel with all actions"""
+        user_vault = get_user_vault(interaction.guild.id, interaction.user.id)
 
         embed = discord.Embed(
-            title=f"👥 {vault_name.title()} Members",
-            color=discord.Color.blue()
+            title="🏦 Vault Management",
+            description="Manage shared economy vaults for your server community.",
+            color=discord.Color.gold()
         )
 
-        # Leader
-        leader = interaction.guild.get_member(vault["leader"])
-        leader_contrib = vault.get("contributions", {}).get(str(vault["leader"]), 0)
-        leader_text = f"👑 **{leader.display_name if leader else 'Unknown'}** (Leader)\n"
-        leader_text += f"   Contributed: {leader_contrib:,} coins"
-
-        embed.add_field(name="Leader", value=leader_text, inline=False)
-
-        # Members
-        if vault.get("members"):
-            member_text = []
-            for uid in vault["members"]:
-                member = interaction.guild.get_member(uid)
-                name = member.display_name if member else "Unknown"
-                contrib = vault.get("contributions", {}).get(str(uid), 0)
-                member_text.append(f"• **{name}** - {contrib:,} coins")
-
+        if user_vault:
+            vault_data = get_vault(interaction.guild.id, user_vault)
+            is_leader = vault_data and vault_data.get("leader") == interaction.user.id
+            role = "👑 Leader" if is_leader else "👥 Member"
             embed.add_field(
-                name=f"Members ({len(vault['members'])})",
-                value="\n".join(member_text[:10]),  # Limit to 10
+                name="Your Vault",
+                value=f"**{user_vault.title()}** ({role})\n💰 Balance: {vault_data['balance']:,} coins",
                 inline=False
             )
+            if is_leader:
+                embed.add_field(
+                    name="Leader Actions",
+                    value="As the leader, you can Withdraw, Set Goal, and view Members.",
+                    inline=False
+                )
         else:
-            embed.add_field(name="Members", value="No other members yet!", inline=False)
+            embed.add_field(
+                name="No Vault",
+                value="You're not in a vault. Create one or join an existing vault!",
+                inline=False
+            )
 
-        await interaction.response.send_message(embed=embed)
+        embed.set_footer(text="Click a button below to manage vaults")
+
+        view = VaultPanelView(interaction.user.id, interaction.guild.id)
+        await interaction.response.send_message(embed=embed, view=view)
 
 
 async def setup(bot: commands.Bot):
