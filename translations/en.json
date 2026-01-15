@@ -1,0 +1,90 @@
+{
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "success": "Success!",
+    "error": "Error",
+    "loading": "Loading...",
+    "none": "None",
+    "unknown": "Unknown"
+  },
+  "errors": {
+    "no_permission": "You don't have permission to use this command!",
+    "bot_no_permission": "I don't have permission to do that!",
+    "invalid_user": "Invalid user!",
+    "invalid_channel": "Invalid channel!",
+    "invalid_role": "Invalid role!",
+    "command_failed": "Command failed. Please try again.",
+    "cooldown": "Please wait {seconds} seconds before using this command again.",
+    "server_only": "This command can only be used in a server!"
+  },
+  "welcome": {
+    "title": "Welcome!",
+    "message": "Welcome to {server}, {user}!",
+    "member_count": "You are member #{count}",
+    "dm_message": "Welcome to **{server}**! Check out our rules and enjoy your stay!"
+  },
+  "goodbye": {
+    "title": "Goodbye!",
+    "message": "Goodbye {user}! We'll miss you!",
+    "left": "{user} has left the server"
+  },
+  "economy": {
+    "balance": "Balance",
+    "coins": "coins",
+    "daily_claimed": "You claimed your daily reward!",
+    "daily_cooldown": "You can claim again in {time}",
+    "not_enough": "You don't have enough coins!",
+    "transferred": "Successfully transferred {amount} coins to {user}!"
+  },
+  "leveling": {
+    "level_up": "Level Up!",
+    "level_up_message": "Congratulations {user}! You reached level {level}!",
+    "rank": "Rank",
+    "xp": "XP",
+    "level": "Level"
+  },
+  "moderation": {
+    "warned": "{user} has been warned!",
+    "kicked": "{user} has been kicked!",
+    "banned": "{user} has been banned!",
+    "unbanned": "{user} has been unbanned!",
+    "muted": "{user} has been muted!",
+    "unmuted": "{user} has been unmuted!",
+    "reason": "Reason"
+  },
+  "games": {
+    "trivia_correct": "Correct!",
+    "trivia_wrong": "Wrong! The answer was: {answer}",
+    "you_win": "You win!",
+    "you_lose": "You lose!",
+    "tie": "It's a tie!"
+  },
+  "reminders": {
+    "reminder_set": "Reminder set!",
+    "reminder_sent": "Reminder!",
+    "no_reminders": "You don't have any reminders."
+  },
+  "giveaway": {
+    "title": "GIVEAWAY!",
+    "ended": "Giveaway Ended!",
+    "winner": "Winner",
+    "winners": "Winners",
+    "no_entries": "No entries!",
+    "enter": "Enter",
+    "entries": "Entries"
+  },
+  "poll": {
+    "title": "Poll",
+    "ended": "Poll Ended",
+    "votes": "votes",
+    "total_votes": "Total votes"
+  },
+  "config": {
+    "language_set": "Server language set to {language}!",
+    "language_unsupported": "Language not supported!",
+    "settings_updated": "Settings updated!"
+  }
+}

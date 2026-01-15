@@ -18,7 +18,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Button, Select
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Tuple
+import re
 
 from utils.reaction_roles_db import (
     create_reaction_panel,
@@ -30,6 +31,23 @@ from utils.reaction_roles_db import (
     update_panel_mode
 )
 from utils.logger import logger
+
+
+def parse_message_link(link: str) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    """
+    Parse a Discord message link to extract guild_id, channel_id, and message_id
+
+    Returns:
+        (guild_id, channel_id, message_id) or (None, None, None) if invalid
+    """
+    # Pattern for Discord message links
+    pattern = r'https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)'
+    match = re.match(pattern, link.strip())
+
+    if match:
+        return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+    return None, None, None
 
 
 # ============================================
@@ -285,7 +303,7 @@ class ReactionRoles(commands.Cog):
             await interaction.followup.send(
                 f"Reaction role panel created!\n"
                 f"Now add roles using `/reactionrole addrole`\n"
-                f"Message ID: `{msg.id}`",
+                f"Message link: {msg.jump_url}",
                 ephemeral=True
             )
             logger.info(f"Reaction role panel created in {interaction.guild.name}")
@@ -295,7 +313,7 @@ class ReactionRoles(commands.Cog):
 
     @reactionrole_group.command(name="addrole", description="Add a role to a reaction role panel")
     @app_commands.describe(
-        message_id="The message ID of the panel",
+        message_link="The message link of the panel (right-click message -> Copy Message Link)",
         role="The role to add",
         emoji="Emoji for the button/option (optional)",
         label="Button label or option text (optional)"
@@ -304,17 +322,25 @@ class ReactionRoles(commands.Cog):
     async def rr_addrole(
         self,
         interaction: discord.Interaction,
-        message_id: str,
+        message_link: str,
         role: discord.Role,
         emoji: Optional[str] = None,
         label: Optional[str] = None
     ):
         """Add a role to a panel"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+
+        if not msg_id:
             await interaction.response.send_message(
-                "Invalid message ID!",
+                "Invalid message link! Right-click a message and select 'Copy Message Link'.",
+                ephemeral=True
+            )
+            return
+
+        # Verify the message is from this guild
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message is from a different server!",
                 ephemeral=True
             )
             return
@@ -352,7 +378,7 @@ class ReactionRoles(commands.Cog):
         panel = get_panel_by_message(interaction.guild.id, msg_id)
         if panel:
             try:
-                channel = interaction.guild.get_channel(panel["channel_id"])
+                channel = interaction.guild.get_channel(channel_id)
                 msg = await channel.fetch_message(msg_id)
 
                 # Create new view
@@ -395,21 +421,31 @@ class ReactionRoles(commands.Cog):
 
     @reactionrole_group.command(name="removerole", description="Remove a role from a panel")
     @app_commands.describe(
-        message_id="The message ID of the panel",
+        message_link="The message link of the panel (right-click message -> Copy Message Link)",
         role="The role to remove"
     )
     @app_commands.default_permissions(manage_roles=True)
     async def rr_removerole(
         self,
         interaction: discord.Interaction,
-        message_id: str,
+        message_link: str,
         role: discord.Role
     ):
         """Remove a role from a panel"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click a message and select 'Copy Message Link'.",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message is from a different server!",
+                ephemeral=True
+            )
             return
 
         success, message = remove_role_from_panel(
@@ -426,7 +462,7 @@ class ReactionRoles(commands.Cog):
         panel = get_panel_by_message(interaction.guild.id, msg_id)
         if panel:
             try:
-                channel = interaction.guild.get_channel(panel["channel_id"])
+                channel = interaction.guild.get_channel(channel_id)
                 msg = await channel.fetch_message(msg_id)
 
                 view = ReactionRoleView(panel, interaction.guild)
@@ -460,14 +496,24 @@ class ReactionRoles(commands.Cog):
             await interaction.response.send_message(message, ephemeral=True)
 
     @reactionrole_group.command(name="delete", description="Delete a reaction role panel")
-    @app_commands.describe(message_id="The message ID of the panel to delete")
+    @app_commands.describe(message_link="The message link of the panel (right-click message -> Copy Message Link)")
     @app_commands.default_permissions(manage_roles=True)
-    async def rr_delete(self, interaction: discord.Interaction, message_id: str):
+    async def rr_delete(self, interaction: discord.Interaction, message_link: str):
         """Delete a reaction role panel"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click a message and select 'Copy Message Link'.",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message is from a different server!",
+                ephemeral=True
+            )
             return
 
         panel = get_panel_by_message(interaction.guild.id, msg_id)
@@ -482,7 +528,7 @@ class ReactionRoles(commands.Cog):
         if success:
             # Try to delete the message too
             try:
-                channel = interaction.guild.get_channel(panel["channel_id"])
+                channel = interaction.guild.get_channel(channel_id)
                 msg = await channel.fetch_message(msg_id)
                 await msg.delete()
             except:
@@ -518,12 +564,15 @@ class ReactionRoles(commands.Cog):
             channel = interaction.guild.get_channel(panel["channel_id"])
             roles_count = len(panel["roles"])
 
+            # Build message link
+            msg_link = f"https://discord.com/channels/{interaction.guild.id}/{panel['channel_id']}/{panel['message_id']}"
+
             embed.add_field(
                 name=f"{i}. {panel['title']}",
                 value=(
                     f"Channel: {channel.mention if channel else 'Unknown'}\n"
                     f"Type: {panel['panel_type']} | Mode: {panel['mode']}\n"
-                    f"Roles: {roles_count} | Message ID: `{panel['message_id']}`"
+                    f"Roles: {roles_count} | [Jump to message]({msg_link})"
                 ),
                 inline=False
             )
@@ -532,21 +581,31 @@ class ReactionRoles(commands.Cog):
 
     @reactionrole_group.command(name="mode", description="Change panel mode (single/multiple)")
     @app_commands.describe(
-        message_id="The message ID of the panel",
+        message_link="The message link of the panel (right-click message -> Copy Message Link)",
         mode="New selection mode"
     )
     @app_commands.default_permissions(manage_roles=True)
     async def rr_mode(
         self,
         interaction: discord.Interaction,
-        message_id: str,
+        message_link: str,
         mode: Literal["single", "multiple"]
     ):
         """Change panel mode"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click a message and select 'Copy Message Link'.",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message is from a different server!",
+                ephemeral=True
+            )
             return
 
         success, message = update_panel_mode(interaction.guild.id, msg_id, mode)
@@ -556,7 +615,7 @@ class ReactionRoles(commands.Cog):
             panel = get_panel_by_message(interaction.guild.id, msg_id)
             if panel:
                 try:
-                    channel = interaction.guild.get_channel(panel["channel_id"])
+                    channel = interaction.guild.get_channel(channel_id)
                     msg = await channel.fetch_message(msg_id)
 
                     view = ReactionRoleView(panel, interaction.guild)

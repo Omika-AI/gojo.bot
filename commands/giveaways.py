@@ -18,7 +18,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 from discord.ui import View, Button
-from typing import Optional, Literal
+from typing import Optional, Literal, Tuple
 from datetime import datetime, timedelta
 import re
 
@@ -39,6 +39,15 @@ from utils.giveaways_db import (
     delete_poll
 )
 from utils.logger import logger
+
+
+def parse_message_link(link: str) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    """Parse a Discord message link to extract guild_id, channel_id, and message_id"""
+    pattern = r'https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)'
+    match = re.match(pattern, link.strip())
+    if match:
+        return int(match.group(1)), int(match.group(2)), int(match.group(3))
+    return None, None, None
 
 
 # ============================================
@@ -493,14 +502,23 @@ class Giveaways(commands.Cog):
         logger.info(f"Giveaway started in {interaction.guild.name}: {prize}")
 
     @giveaway_group.command(name="end", description="End a giveaway early")
-    @app_commands.describe(message_id="The message ID of the giveaway")
+    @app_commands.describe(message_link="The message link of the giveaway (right-click message -> Copy Message Link)")
     @app_commands.default_permissions(manage_guild=True)
-    async def giveaway_end(self, interaction: discord.Interaction, message_id: str):
+    async def giveaway_end(self, interaction: discord.Interaction, message_link: str):
         """End a giveaway early"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click the giveaway message and select 'Copy Message Link'",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message link is from a different server!",
+                ephemeral=True
+            )
             return
 
         giveaway = get_giveaway(interaction.guild.id, msg_id)
@@ -514,21 +532,30 @@ class Giveaways(commands.Cog):
 
     @giveaway_group.command(name="reroll", description="Reroll giveaway winners")
     @app_commands.describe(
-        message_id="The message ID of the giveaway",
+        message_link="The message link of the giveaway (right-click message -> Copy Message Link)",
         count="Number of new winners to pick (default: 1)"
     )
     @app_commands.default_permissions(manage_guild=True)
     async def giveaway_reroll(
         self,
         interaction: discord.Interaction,
-        message_id: str,
+        message_link: str,
         count: Optional[int] = 1
     ):
         """Reroll winners"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click the giveaway message and select 'Copy Message Link'",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message link is from a different server!",
+                ephemeral=True
+            )
             return
 
         success, new_winners, message = reroll_giveaway(interaction.guild.id, msg_id, count)
@@ -574,12 +601,13 @@ class Giveaways(commands.Cog):
 
         for g in giveaways[:10]:
             ends_at = datetime.fromisoformat(g["ends_at"])
+            msg_link = f"https://discord.com/channels/{interaction.guild.id}/{g['channel_id']}/{g['message_id']}"
             embed.add_field(
                 name=g["prize"],
                 value=(
                     f"Entries: {len(g['entries'])} | Winners: {g['winners_count']}\n"
                     f"Ends: <t:{int(ends_at.timestamp())}:R>\n"
-                    f"Message ID: `{g['message_id']}`"
+                    f"[Jump to Giveaway]({msg_link})"
                 ),
                 inline=False
             )
@@ -587,14 +615,23 @@ class Giveaways(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @giveaway_group.command(name="delete", description="Delete a giveaway")
-    @app_commands.describe(message_id="The message ID of the giveaway")
+    @app_commands.describe(message_link="The message link of the giveaway (right-click message -> Copy Message Link)")
     @app_commands.default_permissions(manage_guild=True)
-    async def giveaway_delete(self, interaction: discord.Interaction, message_id: str):
+    async def giveaway_delete(self, interaction: discord.Interaction, message_link: str):
         """Delete a giveaway"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click the giveaway message and select 'Copy Message Link'",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message link is from a different server!",
+                ephemeral=True
+            )
             return
 
         giveaway = get_giveaway(interaction.guild.id, msg_id)
@@ -725,14 +762,23 @@ class Giveaways(commands.Cog):
         logger.info(f"Poll created in {interaction.guild.name}: {question}")
 
     @poll_group.command(name="end", description="End a poll early")
-    @app_commands.describe(message_id="The message ID of the poll")
+    @app_commands.describe(message_link="The message link of the poll (right-click message -> Copy Message Link)")
     @app_commands.default_permissions(manage_messages=True)
-    async def poll_end(self, interaction: discord.Interaction, message_id: str):
+    async def poll_end(self, interaction: discord.Interaction, message_link: str):
         """End a poll early"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click the poll message and select 'Copy Message Link'",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message link is from a different server!",
+                ephemeral=True
+            )
             return
 
         poll = get_poll(interaction.guild.id, msg_id)
@@ -745,13 +791,22 @@ class Giveaways(commands.Cog):
         await interaction.followup.send("Poll ended!", ephemeral=True)
 
     @poll_group.command(name="results", description="View poll results")
-    @app_commands.describe(message_id="The message ID of the poll")
-    async def poll_results(self, interaction: discord.Interaction, message_id: str):
+    @app_commands.describe(message_link="The message link of the poll (right-click message -> Copy Message Link)")
+    async def poll_results(self, interaction: discord.Interaction, message_link: str):
         """View poll results"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click the poll message and select 'Copy Message Link'",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message link is from a different server!",
+                ephemeral=True
+            )
             return
 
         poll = get_poll(interaction.guild.id, msg_id)
@@ -763,14 +818,23 @@ class Giveaways(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @poll_group.command(name="delete", description="Delete a poll")
-    @app_commands.describe(message_id="The message ID of the poll")
+    @app_commands.describe(message_link="The message link of the poll (right-click message -> Copy Message Link)")
     @app_commands.default_permissions(manage_messages=True)
-    async def poll_delete(self, interaction: discord.Interaction, message_id: str):
+    async def poll_delete(self, interaction: discord.Interaction, message_link: str):
         """Delete a poll"""
-        try:
-            msg_id = int(message_id)
-        except ValueError:
-            await interaction.response.send_message("Invalid message ID!", ephemeral=True)
+        guild_id, channel_id, msg_id = parse_message_link(message_link)
+        if not msg_id:
+            await interaction.response.send_message(
+                "Invalid message link! Right-click the poll message and select 'Copy Message Link'",
+                ephemeral=True
+            )
+            return
+
+        if guild_id != interaction.guild.id:
+            await interaction.response.send_message(
+                "That message link is from a different server!",
+                ephemeral=True
+            )
             return
 
         poll = get_poll(interaction.guild.id, msg_id)

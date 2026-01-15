@@ -1,0 +1,90 @@
+{
+  "common": {
+    "yes": "Ja",
+    "no": "Nej",
+    "enabled": "Aktiveret",
+    "disabled": "Deaktiveret",
+    "success": "Succes!",
+    "error": "Fejl",
+    "loading": "Indlaeser...",
+    "none": "Ingen",
+    "unknown": "Ukendt"
+  },
+  "errors": {
+    "no_permission": "Du har ikke tilladelse til at bruge denne kommando!",
+    "bot_no_permission": "Jeg har ikke tilladelse til at goere det!",
+    "invalid_user": "Ugyldig bruger!",
+    "invalid_channel": "Ugyldig kanal!",
+    "invalid_role": "Ugyldig rolle!",
+    "command_failed": "Kommandoen mislykkedes. Proev igen.",
+    "cooldown": "Vent venligst {seconds} sekunder foer du bruger denne kommando igen.",
+    "server_only": "Denne kommando kan kun bruges paa en server!"
+  },
+  "welcome": {
+    "title": "Velkommen!",
+    "message": "Velkommen til {server}, {user}!",
+    "member_count": "Du er medlem #{count}",
+    "dm_message": "Velkommen til **{server}**! Tjek vores regler og nyd dit ophold!"
+  },
+  "goodbye": {
+    "title": "Farvel!",
+    "message": "Farvel {user}! Vi vil savne dig!",
+    "left": "{user} har forladt serveren"
+  },
+  "economy": {
+    "balance": "Saldo",
+    "coins": "moenter",
+    "daily_claimed": "Du har modtaget din daglige beloening!",
+    "daily_cooldown": "Du kan kraeve igen om {time}",
+    "not_enough": "Du har ikke nok moenter!",
+    "transferred": "Overforslen af {amount} moenter til {user} lykkedes!"
+  },
+  "leveling": {
+    "level_up": "Niveau Op!",
+    "level_up_message": "Tillykke {user}! Du naaede niveau {level}!",
+    "rank": "Rang",
+    "xp": "XP",
+    "level": "Niveau"
+  },
+  "moderation": {
+    "warned": "{user} har faaet en advarsel!",
+    "kicked": "{user} er blevet smidt ud!",
+    "banned": "{user} er blevet bandlyst!",
+    "unbanned": "{user} er ikke laengere bandlyst!",
+    "muted": "{user} er blevet muted!",
+    "unmuted": "{user} er ikke laengere muted!",
+    "reason": "Aarsag"
+  },
+  "games": {
+    "trivia_correct": "Rigtigt!",
+    "trivia_wrong": "Forkert! Svaret var: {answer}",
+    "you_win": "Du vinder!",
+    "you_lose": "Du taber!",
+    "tie": "Det er uafgjort!"
+  },
+  "reminders": {
+    "reminder_set": "Paemindelse sat!",
+    "reminder_sent": "Paemindelse!",
+    "no_reminders": "Du har ingen paemindelser."
+  },
+  "giveaway": {
+    "title": "GIVEAWAY!",
+    "ended": "Giveaway Afsluttet!",
+    "winner": "Vinder",
+    "winners": "Vindere",
+    "no_entries": "Ingen deltagere!",
+    "enter": "Deltag",
+    "entries": "Deltagere"
+  },
+  "poll": {
+    "title": "Afstemning",
+    "ended": "Afstemning Afsluttet",
+    "votes": "stemmer",
+    "total_votes": "Totale stemmer"
+  },
+  "config": {
+    "language_set": "Serversprog sat til {language}!",
+    "language_unsupported": "Sprog understøttes ikke!",
+    "settings_updated": "Indstillinger opdateret!"
+  }
+}
