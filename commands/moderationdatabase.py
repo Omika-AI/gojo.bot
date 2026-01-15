@@ -2,14 +2,13 @@
 /moderationdatabase Command
 Unified moderation database interface for viewing logs, statistics, and user history
 
-Features (accessible via dropdown):
+Features (accessible via buttons):
 - View Moderation Logs
 - Moderation Statistics
 - User History
 - Moderator Activity
 - Search Event Logs
 - Event Log Statistics
-- Clear Logs (Server Owner only)
 """
 
 import discord
@@ -26,7 +25,6 @@ from utils.moderation_logs import (
     get_stats as get_mod_stats,
     get_user_history,
     get_moderator_activity,
-    clear_logs,
     format_action_emoji,
     ModAction
 )
@@ -576,45 +574,12 @@ class BackToMenuView(View):
         await interaction.response.edit_message(embed=view.get_main_embed(), view=view)
 
 
-class ClearLogsConfirmView(View):
-    """Confirmation view for clearing logs"""
-
-    def __init__(self, user_id: int, guild_id: int):
-        super().__init__(timeout=30)
-        self.user_id = user_id
-        self.guild_id = guild_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("This isn't your view!", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="Yes, Clear All Logs", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction, button: Button):
-        clear_logs(self.guild_id)
-        await interaction.response.edit_message(
-            content="\u2705 All moderation logs have been cleared.",
-            embed=None,
-            view=None
-        )
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: Button):
-        view = ModerationDatabaseMainView(self.user_id, self.guild_id)
-        await interaction.response.edit_message(
-            content=None,
-            embed=view.get_main_embed(),
-            view=view
-        )
-
-
 # =============================================================================
 # MAIN VIEW
 # =============================================================================
 
 class ModerationDatabaseMainView(View):
-    """Main menu view for moderation database"""
+    """Main menu view for moderation database with buttons"""
 
     def __init__(self, user_id: int, guild_id: int):
         super().__init__(timeout=300)
@@ -630,176 +595,114 @@ class ModerationDatabaseMainView(View):
     def get_main_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title="\U0001f4be Moderation Database",
-            description="Select an option from the dropdown menu below to access moderation data.",
+            description="Click a button below to access moderation data.",
             color=discord.Color.dark_blue()
         )
 
         embed.add_field(
             name="\U0001f4dc Moderation Logs",
-            value="View all moderation actions (warns, timeouts, kicks, bans)",
+            value="View all moderation actions",
             inline=True
         )
         embed.add_field(
             name="\U0001f4ca Mod Statistics",
-            value="View action breakdown and top moderators",
+            value="Action breakdown & top mods",
             inline=True
         )
         embed.add_field(
             name="\U0001f464 User History",
-            value="Check a specific user's moderation history",
+            value="Check a user's mod history",
             inline=True
         )
         embed.add_field(
             name="\U0001f6e1 Mod Activity",
-            value="View a moderator's action history",
+            value="View moderator's actions",
             inline=True
         )
         embed.add_field(
-            name="\U0001f50d Search Event Logs",
-            value="Search through event logs with filters",
+            name="\U0001f50d Search Logs",
+            value="Search event logs",
             inline=True
         )
         embed.add_field(
             name="\U0001f4c8 Event Stats",
-            value="View event logging statistics",
+            value="Event logging statistics",
             inline=True
         )
 
-        embed.set_footer(text="Use the dropdown menu below to select an option")
-
         return embed
 
-    @discord.ui.select(
-        placeholder="Select an option...",
-        options=[
-            discord.SelectOption(
-                label="Moderation Logs",
-                description="View all moderation actions",
-                value="mod_logs",
-                emoji="\U0001f4dc"
-            ),
-            discord.SelectOption(
-                label="Mod Statistics",
-                description="View action breakdown and top moderators",
-                value="mod_stats",
-                emoji="\U0001f4ca"
-            ),
-            discord.SelectOption(
-                label="User History",
-                description="Check a user's moderation history",
-                value="user_history",
-                emoji="\U0001f464"
-            ),
-            discord.SelectOption(
-                label="Moderator Activity",
-                description="View a moderator's action history",
-                value="mod_activity",
-                emoji="\U0001f6e1"
-            ),
-            discord.SelectOption(
-                label="Search Event Logs",
-                description="Search through event logs",
-                value="search_logs",
-                emoji="\U0001f50d"
-            ),
-            discord.SelectOption(
-                label="Event Log Stats",
-                description="View event logging statistics",
-                value="event_stats",
-                emoji="\U0001f4c8"
-            ),
-            discord.SelectOption(
-                label="Clear All Logs",
-                description="Clear all moderation logs (Server Owner only)",
-                value="clear_logs",
-                emoji="\U0001f5d1"
-            ),
-        ]
-    )
-    async def select_option(self, interaction: discord.Interaction, select: Select):
-        value = select.values[0]
+    @discord.ui.button(label="Mod Logs", style=discord.ButtonStyle.primary, emoji="\U0001f4dc", row=0)
+    async def mod_logs_btn(self, interaction: discord.Interaction, button: Button):
+        """View moderation logs"""
+        view = ModLogsView(guild_id=self.guild_id, user_id=self.user_id)
+        await interaction.response.edit_message(embed=view.get_logs_embed(), view=view)
 
-        if value == "mod_logs":
-            view = ModLogsView(guild_id=self.guild_id, user_id=self.user_id)
-            await interaction.response.edit_message(embed=view.get_logs_embed(), view=view)
+    @discord.ui.button(label="Mod Stats", style=discord.ButtonStyle.primary, emoji="\U0001f4ca", row=0)
+    async def mod_stats_btn(self, interaction: discord.Interaction, button: Button):
+        """View moderation statistics"""
+        stats = get_mod_stats(self.guild_id)
+        embed = create_mod_stats_embed(stats, interaction.guild.name)
+        view = BackToMenuView(self.user_id, self.guild_id)
+        await interaction.response.edit_message(embed=embed, view=view)
 
-        elif value == "mod_stats":
-            stats = get_mod_stats(self.guild_id)
-            embed = create_mod_stats_embed(stats, interaction.guild.name)
-            view = BackToMenuView(self.user_id, self.guild_id)
-            await interaction.response.edit_message(embed=embed, view=view)
+    @discord.ui.button(label="User History", style=discord.ButtonStyle.primary, emoji="\U0001f464", row=0)
+    async def user_history_btn(self, interaction: discord.Interaction, button: Button):
+        """Check a user's moderation history"""
+        await interaction.response.send_modal(UserHistoryModal(self.user_id, self.guild_id))
 
-        elif value == "user_history":
-            await interaction.response.send_modal(UserHistoryModal(self.user_id, self.guild_id))
+    @discord.ui.button(label="Mod Activity", style=discord.ButtonStyle.secondary, emoji="\U0001f6e1", row=1)
+    async def mod_activity_btn(self, interaction: discord.Interaction, button: Button):
+        """View a moderator's action history"""
+        await interaction.response.send_modal(ModActivityModal(self.user_id, self.guild_id))
 
-        elif value == "mod_activity":
-            await interaction.response.send_modal(ModActivityModal(self.user_id, self.guild_id))
+    @discord.ui.button(label="Search Logs", style=discord.ButtonStyle.secondary, emoji="\U0001f50d", row=1)
+    async def search_logs_btn(self, interaction: discord.Interaction, button: Button):
+        """Search through event logs"""
+        config = get_guild_config(self.guild_id)
+        if not config:
+            await interaction.response.send_message(
+                "Event logging is not set up yet! Use `/setuplogs` to configure logging first.",
+                ephemeral=True
+            )
+            return
+        await interaction.response.send_modal(SearchLogsModal(self.user_id, self.guild_id))
 
-        elif value == "search_logs":
-            config = get_guild_config(self.guild_id)
-            if not config:
-                await interaction.response.send_message(
-                    "Event logging is not set up yet! Use `/setuplogs` to configure logging first.",
-                    ephemeral=True
-                )
-                return
-            await interaction.response.send_modal(SearchLogsModal(self.user_id, self.guild_id))
+    @discord.ui.button(label="Event Stats", style=discord.ButtonStyle.secondary, emoji="\U0001f4c8", row=1)
+    async def event_stats_btn(self, interaction: discord.Interaction, button: Button):
+        """View event logging statistics"""
+        config = get_guild_config(self.guild_id)
+        if not config:
+            await interaction.response.send_message(
+                "Event logging is not set up yet! Use `/setuplogs` to configure logging first.",
+                ephemeral=True
+            )
+            return
 
-        elif value == "event_stats":
-            config = get_guild_config(self.guild_id)
-            if not config:
-                await interaction.response.send_message(
-                    "Event logging is not set up yet! Use `/setuplogs` to configure logging first.",
-                    ephemeral=True
-                )
-                return
+        stats = get_event_stats(self.guild_id)
+        embed = discord.Embed(
+            title="Event Log Statistics",
+            description=f"**Server:** {interaction.guild.name}",
+            color=discord.Color.gold()
+        )
 
-            stats = get_event_stats(self.guild_id)
-            embed = discord.Embed(
-                title="Event Log Statistics",
-                description=f"**Server:** {interaction.guild.name}",
-                color=discord.Color.gold()
+        categories = stats.get("categories", {})
+        if categories:
+            cat_text = []
+            for cat, count in sorted(categories.items(), key=lambda x: x[1], reverse=True):
+                cat_text.append(f"**{cat.title()}:** {count}")
+            embed.add_field(
+                name="Category Breakdown",
+                value="\n".join(cat_text) if cat_text else "No events logged",
+                inline=False
             )
 
-            categories = stats.get("categories", {})
-            if categories:
-                cat_text = []
-                for cat, count in sorted(categories.items(), key=lambda x: x[1], reverse=True):
-                    cat_text.append(f"**{cat.title()}:** {count}")
-                embed.add_field(
-                    name="Category Breakdown",
-                    value="\n".join(cat_text) if cat_text else "No events logged",
-                    inline=False
-                )
+        total = stats.get("total", 0)
+        embed.add_field(name="Total Events Logged", value=str(total), inline=True)
+        embed.add_field(name="Log Channel", value=f"<#{config['channel_id']}>", inline=True)
 
-            total = stats.get("total", 0)
-            embed.add_field(name="Total Events Logged", value=str(total), inline=True)
-            embed.add_field(name="Log Channel", value=f"<#{config['channel_id']}>", inline=True)
-
-            view = BackToMenuView(self.user_id, self.guild_id)
-            await interaction.response.edit_message(embed=embed, view=view)
-
-        elif value == "clear_logs":
-            # Server owner check
-            if interaction.user.id != interaction.guild.owner_id:
-                await interaction.response.send_message(
-                    "Only the **Server Owner** can clear moderation logs!",
-                    ephemeral=True
-                )
-                return
-
-            embed = discord.Embed(
-                title="\u26a0\ufe0f Clear All Logs?",
-                description=(
-                    "**Warning:** This will permanently delete all moderation logs for this server.\n"
-                    "This action **cannot be undone!**\n\n"
-                    "Are you sure you want to continue?"
-                ),
-                color=discord.Color.red()
-            )
-
-            view = ClearLogsConfirmView(self.user_id, self.guild_id)
-            await interaction.response.edit_message(embed=embed, view=view)
+        view = BackToMenuView(self.user_id, self.guild_id)
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
 # =============================================================================
