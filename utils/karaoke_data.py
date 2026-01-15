@@ -42,6 +42,7 @@ class KaraokeSong:
     duration: int              # Duration in seconds (approximate)
     lyrics_file: str           # Path to LRC file relative to data/karaoke/
     lyrics: List[LyricLine] = None  # Parsed lyrics (loaded on demand)
+    solo_only: bool = False    # If True, song can only be sung in solo mode (not duet)
 
     @property
     def display_name(self) -> str:
@@ -105,7 +106,8 @@ KARAOKE_SONGS: Dict[str, KaraokeSong] = {
         artist="Juice WRLD",
         soundcloud_url="https://soundcloud.com/uiceheidd/lucid-dreams-forget-me",
         duration=240,  # 4:00
-        lyrics_file="lucid_dreams.lrc"
+        lyrics_file="lucid_dreams.lrc",
+        solo_only=True  # This song can only be sung solo, not as a duet
     ),
 }
 

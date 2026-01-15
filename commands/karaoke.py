@@ -161,7 +161,7 @@ class KaraokeModeView(View):
 
         embed = discord.Embed(
             title="🎤 Available Karaoke Songs",
-            description="Here are all the songs you can sing!",
+            description="Here are all the songs you can sing!\n*🌟 = Solo Only*",
             color=discord.Color.magenta()
         )
 
@@ -169,7 +169,9 @@ class KaraokeModeView(View):
             "happier": "😊",
             "stereo_hearts": "💕",
             "viva_la_vida": "👑",
-            "something_blue": "💙"
+            "something_blue": "💙",
+            "youre_welcome": "🌊",
+            "lucid_dreams": "💭"
         }
 
         for i, song in enumerate(songs, 1):
@@ -177,9 +179,10 @@ class KaraokeModeView(View):
             mins = song.duration // 60
             secs = song.duration % 60
             duration_str = f"{mins}:{secs:02d}"
+            solo_marker = " 🌟" if song.solo_only else ""
 
             embed.add_field(
-                name=f"{emoji} {i}. {song.title}",
+                name=f"{emoji} {i}. {song.title}{solo_marker}",
                 value=f"**Artist:** {song.artist}\n**Duration:** {duration_str}",
                 inline=True
             )
@@ -486,6 +489,12 @@ class SongSelectView(View):
         """Add the song selection dropdown"""
         songs = get_all_songs()
 
+        # Filter out solo-only songs if in duet mode
+        if self.mode == "duet":
+            available_songs = [song for song in songs if not song.solo_only]
+        else:
+            available_songs = songs
+
         select = Select(
             placeholder="Choose a song to sing...",
             custom_id="song_select",
@@ -494,11 +503,11 @@ class SongSelectView(View):
             options=[
                 discord.SelectOption(
                     label=song.title,
-                    description=f"by {song.artist}",
+                    description=f"by {song.artist}" + (" (Solo Only)" if song.solo_only else ""),
                     value=song.id,
                     emoji=self._get_song_emoji(song.id)
                 )
-                for song in songs
+                for song in available_songs
             ]
         )
         select.callback = self.song_selected
@@ -510,7 +519,9 @@ class SongSelectView(View):
             "happier": "😊",
             "stereo_hearts": "💕",
             "viva_la_vida": "👑",
-            "something_blue": "💙"
+            "something_blue": "💙",
+            "youre_welcome": "🌊",
+            "lucid_dreams": "💭"
         }
         return emojis.get(song_id, "🎤")
 
