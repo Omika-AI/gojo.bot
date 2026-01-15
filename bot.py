@@ -153,6 +153,151 @@ async def on_guild_remove(guild: discord.Guild):
 
 
 @bot.event
+async def on_member_join(member: discord.Member):
+    """Called when a member joins a server - send welcome message/card"""
+    if member.bot:
+        return
+
+    try:
+        from utils.server_config_db import get_welcome_config, get_auto_role_config
+        from utils.card_generator import create_welcome_card, image_to_bytes
+
+        guild = member.guild
+
+        # Handle auto roles
+        auto_role_config = get_auto_role_config(guild.id)
+        if auto_role_config["enabled"] and auto_role_config["role_ids"]:
+            for role_id in auto_role_config["role_ids"]:
+                role = guild.get_role(role_id)
+                if role and role < guild.me.top_role:
+                    try:
+                        await member.add_roles(role, reason="Auto-role on join")
+                        logger.info(f"Added auto-role {role.name} to {member.name} in {guild.name}")
+                    except discord.Forbidden:
+                        logger.error(f"Can't add auto-role {role.name} - missing permissions")
+
+        # Handle welcome message
+        welcome_config = get_welcome_config(guild.id)
+        if not welcome_config["enabled"]:
+            return
+
+        channel_id = welcome_config["channel_id"]
+        if not channel_id:
+            return
+
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            return
+
+        # Format message
+        message = welcome_config.get("message", "Welcome to {server}, {user}!")
+        message = message.replace("{user}", member.mention)
+        message = message.replace("{username}", member.display_name)
+        message = message.replace("{server}", guild.name)
+        message = message.replace("{member_count}", str(guild.member_count))
+
+        if welcome_config["use_image"]:
+            # Generate welcome card
+            card = await create_welcome_card(
+                avatar_url=member.display_avatar.url,
+                username=member.display_name,
+                member_count=guild.member_count,
+                server_name=guild.name,
+                background_url=welcome_config.get("background_url")
+            )
+            buffer = image_to_bytes(card)
+            file = discord.File(buffer, filename=f"welcome_{member.id}.png")
+            await channel.send(content=message, file=file)
+        else:
+            # Text-only welcome
+            embed = discord.Embed(
+                title=f"Welcome to {guild.name}!",
+                description=message,
+                color=discord.Color.green()
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.set_footer(text=f"Member #{guild.member_count}")
+            await channel.send(embed=embed)
+
+        logger.info(f"Sent welcome message for {member.name} in {guild.name}")
+
+        # Send DM if enabled
+        if welcome_config["dm_enabled"]:
+            try:
+                dm_message = welcome_config.get("dm_message", "Welcome to **{server}**!")
+                dm_message = dm_message.replace("{server}", guild.name)
+                dm_message = dm_message.replace("{user}", member.display_name)
+
+                embed = discord.Embed(
+                    title=f"Welcome to {guild.name}!",
+                    description=dm_message,
+                    color=discord.Color.green()
+                )
+                embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+                await member.send(embed=embed)
+            except discord.Forbidden:
+                pass  # Can't DM user
+
+    except Exception as e:
+        logger.error(f"Error in on_member_join: {e}")
+
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    """Called when a member leaves a server - send goodbye message/card"""
+    if member.bot:
+        return
+
+    try:
+        from utils.server_config_db import get_goodbye_config
+        from utils.card_generator import create_goodbye_card, image_to_bytes
+
+        guild = member.guild
+
+        goodbye_config = get_goodbye_config(guild.id)
+        if not goodbye_config["enabled"]:
+            return
+
+        channel_id = goodbye_config["channel_id"]
+        if not channel_id:
+            return
+
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            return
+
+        # Format message
+        message = goodbye_config.get("message", "Goodbye {user}! We'll miss you!")
+        message = message.replace("{user}", member.display_name)
+        message = message.replace("{server}", guild.name)
+
+        if goodbye_config["use_image"]:
+            # Generate goodbye card
+            card = await create_goodbye_card(
+                avatar_url=member.display_avatar.url,
+                username=member.display_name,
+                server_name=guild.name
+            )
+            buffer = image_to_bytes(card)
+            file = discord.File(buffer, filename=f"goodbye_{member.id}.png")
+            await channel.send(content=message, file=file)
+        else:
+            # Text-only goodbye
+            embed = discord.Embed(
+                title="Goodbye!",
+                description=message,
+                color=discord.Color.orange()
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            await channel.send(embed=embed)
+
+        logger.info(f"Sent goodbye message for {member.name} in {guild.name}")
+
+    except Exception as e:
+        logger.error(f"Error in on_member_remove: {e}")
+
+
+@bot.event
 async def on_command_error(ctx, error):
     """Global error handler for text commands"""
     log_error(error, f"Command error in {ctx.command}")
