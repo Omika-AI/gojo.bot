@@ -301,16 +301,16 @@ class Economy(commands.Cog):
         view = GiveCoinsView(interaction.user, user)
         await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command(name="leaderboard", description="View the richest users")
+    @app_commands.command(name="leaderboard", description="View the richest users globally")
     async def leaderboard(self, interaction: discord.Interaction):
-        """Show the wealth leaderboard"""
+        """Show the global wealth leaderboard"""
         log_command(str(interaction.user), interaction.user.id, "leaderboard", interaction.guild.name)
 
         top_users = get_leaderboard(interaction.guild.id, limit=10)
 
         embed = discord.Embed(
-            title="Coin Leaderboard",
-            description="Top 10 richest users in the server",
+            title="Global Coin Leaderboard",
+            description="Top 10 richest users across all servers",
             color=discord.Color.gold()
         )
 

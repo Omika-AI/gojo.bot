@@ -1,5 +1,6 @@
 """
 Community Stock Market Database - Gamble on other members' activity!
+NOTE: This is a GLOBAL stock market - shares are shared across all servers!
 
 This module handles:
 - Member stock prices based on activity
@@ -62,11 +63,66 @@ def _load_stocks_data() -> dict:
     if os.path.exists(STOCKS_FILE):
         try:
             with open(STOCKS_FILE, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Check if we need to migrate from old guild-based format
+                if "guilds" in data and "members" not in data:
+                    data = _migrate_to_global(data)
+                return data
         except (json.JSONDecodeError, FileNotFoundError):
             pass
 
-    return {"guilds": {}}
+    return {"members": {}, "portfolios": {}, "transactions": []}
+
+
+def _migrate_to_global(old_data: dict) -> dict:
+    """
+    Migrate from guild-based stocks to global stocks.
+    Merges data from all guilds.
+    """
+    from utils.logger import logger
+    logger.info("Migrating stocks data from guild-based to global...")
+
+    new_data = {"members": {}, "portfolios": {}, "transactions": []}
+
+    for guild_id, guild_data in old_data.get("guilds", {}).items():
+        # Merge members
+        for user_id, member_data in guild_data.get("members", {}).items():
+            if user_id not in new_data["members"]:
+                new_data["members"][user_id] = member_data.copy()
+            else:
+                # Merge - take higher values
+                existing = new_data["members"][user_id]
+                if member_data.get("current_price", 0) > existing.get("current_price", 0):
+                    existing["current_price"] = member_data["current_price"]
+                if member_data.get("base_price", 0) > existing.get("base_price", 0):
+                    existing["base_price"] = member_data["base_price"]
+                existing["shares_outstanding"] = existing.get("shares_outstanding", 0) + member_data.get("shares_outstanding", 0)
+
+        # Merge portfolios
+        for user_id, portfolio in guild_data.get("portfolios", {}).items():
+            if user_id not in new_data["portfolios"]:
+                new_data["portfolios"][user_id] = portfolio.copy()
+            else:
+                # Merge holdings
+                existing = new_data["portfolios"][user_id]
+                for target_id, holding in portfolio.get("holdings", {}).items():
+                    if target_id not in existing["holdings"]:
+                        existing["holdings"][target_id] = holding.copy()
+                    else:
+                        # Add shares together
+                        existing["holdings"][target_id]["shares"] += holding.get("shares", 0)
+                        existing["holdings"][target_id]["total_invested"] += holding.get("total_invested", 0)
+                existing["total_invested"] = existing.get("total_invested", 0) + portfolio.get("total_invested", 0)
+
+        # Merge transactions (keep last 100)
+        new_data["transactions"].extend(guild_data.get("transactions", []))
+
+    # Keep only last 100 transactions
+    new_data["transactions"] = new_data["transactions"][-100:]
+
+    _save_stocks_data(new_data)
+    logger.info(f"Migration complete! Migrated {len(new_data['members'])} members and {len(new_data['portfolios'])} portfolios to global stocks.")
+    return new_data
 
 
 def _save_stocks_data(data: dict):
@@ -81,28 +137,13 @@ def _get_today_key() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d")
 
 
-def _ensure_guild_data(data: dict, guild_id: int) -> dict:
-    """Ensure guild data structure exists"""
-    guild_str = str(guild_id)
-
-    if guild_str not in data["guilds"]:
-        data["guilds"][guild_str] = {
-            "members": {},       # Member stock data
-            "portfolios": {},    # Investor portfolios
-            "transactions": [],  # Transaction history
-        }
-
-    return data["guilds"][guild_str]
-
-
 def _get_member_stock_data(guild_id: int, user_id: int) -> dict:
-    """Get or create member stock data"""
+    """Get or create member stock data (GLOBAL - guild_id ignored)"""
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
     user_str = str(user_id)
 
-    if user_str not in guild_data["members"]:
-        guild_data["members"][user_str] = {
+    if user_str not in data["members"]:
+        data["members"][user_str] = {
             "base_price": BASE_STOCK_PRICE,
             "current_price": BASE_STOCK_PRICE,
             "shares_outstanding": 0,
@@ -117,7 +158,7 @@ def _get_member_stock_data(guild_id: int, user_id: int) -> dict:
         }
         _save_stocks_data(data)
 
-    return guild_data["members"][user_str]
+    return data["members"][user_str]
 
 
 # ============================================
@@ -126,21 +167,20 @@ def _get_member_stock_data(guild_id: int, user_id: int) -> dict:
 
 def record_member_activity(guild_id: int, user_id: int, activity_type: str, amount: int = 1):
     """
-    Record member activity which affects their stock price
+    Record member activity which affects their stock price (GLOBAL - guild_id ignored)
 
     Args:
-        guild_id: The guild ID
+        guild_id: Ignored (kept for backwards compatibility)
         user_id: The member whose stock is affected
         activity_type: "messages", "xp_earned", or "voice_minutes"
         amount: Amount of activity
     """
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
     user_str = str(user_id)
 
     # Ensure member data exists
-    if user_str not in guild_data["members"]:
-        guild_data["members"][user_str] = {
+    if user_str not in data["members"]:
+        data["members"][user_str] = {
             "base_price": BASE_STOCK_PRICE,
             "current_price": BASE_STOCK_PRICE,
             "shares_outstanding": 0,
@@ -154,7 +194,7 @@ def record_member_activity(guild_id: int, user_id: int, activity_type: str, amou
             "last_price_update": None
         }
 
-    member = guild_data["members"][user_str]
+    member = data["members"][user_str]
     today = _get_today_key()
 
     # Reset daily activity if new day
@@ -171,14 +211,14 @@ def record_member_activity(guild_id: int, user_id: int, activity_type: str, amou
         member["activity_today"][activity_type] += amount
 
     # Recalculate price
-    _update_member_price(guild_data, user_str)
+    _update_member_price(data, user_str)
 
     _save_stocks_data(data)
 
 
-def _update_member_price(guild_data: dict, user_str: str):
+def _update_member_price(data: dict, user_str: str):
     """Recalculate member's stock price based on activity"""
-    member = guild_data["members"][user_str]
+    member = data["members"][user_str]
     activity = member["activity_today"]
 
     # Calculate activity bonus
@@ -211,13 +251,13 @@ def _update_member_price(guild_data: dict, user_str: str):
 # ============================================
 
 def get_stock_price(guild_id: int, user_id: int) -> int:
-    """Get current stock price for a member"""
+    """Get current stock price for a member (GLOBAL - guild_id ignored)"""
     member = _get_member_stock_data(guild_id, user_id)
     return member.get("current_price", BASE_STOCK_PRICE)
 
 
 def get_member_stock_info(guild_id: int, user_id: int) -> Dict:
-    """Get full stock info for a member"""
+    """Get full stock info for a member (GLOBAL - guild_id ignored)"""
     member = _get_member_stock_data(guild_id, user_id)
 
     # Calculate price change
@@ -244,10 +284,10 @@ def get_member_stock_info(guild_id: int, user_id: int) -> Dict:
 
 def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int) -> Tuple[bool, str, int, int]:
     """
-    Buy shares in another member
+    Buy shares in another member (GLOBAL - guild_id ignored)
 
     Args:
-        guild_id: Guild ID
+        guild_id: Ignored (kept for backwards compatibility)
         investor_id: User buying shares
         target_id: User whose shares are being bought
         num_shares: Number of shares to buy
@@ -262,14 +302,13 @@ def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int)
         return False, f"Minimum transaction is {MIN_TRANSACTION} share(s)!", 0, 0
 
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
 
     investor_str = str(investor_id)
     target_str = str(target_id)
 
     # Ensure target member data exists
-    if target_str not in guild_data["members"]:
-        guild_data["members"][target_str] = {
+    if target_str not in data["members"]:
+        data["members"][target_str] = {
             "base_price": BASE_STOCK_PRICE,
             "current_price": BASE_STOCK_PRICE,
             "shares_outstanding": 0,
@@ -283,7 +322,7 @@ def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int)
             "last_price_update": None
         }
 
-    target_member = guild_data["members"][target_str]
+    target_member = data["members"][target_str]
     current_price = target_member.get("current_price", BASE_STOCK_PRICE)
 
     # Check share limits
@@ -293,10 +332,10 @@ def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int)
         return False, f"Only {available} shares available for this member!", 0, 0
 
     # Initialize portfolio if needed
-    if investor_str not in guild_data["portfolios"]:
-        guild_data["portfolios"][investor_str] = {"holdings": {}, "total_invested": 0}
+    if investor_str not in data["portfolios"]:
+        data["portfolios"][investor_str] = {"holdings": {}, "total_invested": 0}
 
-    portfolio = guild_data["portfolios"][investor_str]
+    portfolio = data["portfolios"][investor_str]
 
     # Check personal share limit
     current_holding = portfolio["holdings"].get(target_str, {}).get("shares", 0)
@@ -309,14 +348,14 @@ def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int)
     fee = int(base_cost * TRANSACTION_FEE_PERCENT / 100)
     total_cost = base_cost + fee
 
-    # Check balance
+    # Check balance (use guild_id=0 since economy is now global)
     from utils.economy_db import get_balance, remove_coins
-    balance = get_balance(guild_id, investor_id)
+    balance = get_balance(0, investor_id)
     if balance < total_cost:
         return False, f"Not enough coins! Cost: {total_cost:,} (includes {fee:,} fee). You have {balance:,}.", 0, 0
 
     # Process transaction
-    remove_coins(guild_id, investor_id, total_cost)
+    remove_coins(0, investor_id, total_cost)
 
     # Update holdings
     if target_str not in portfolio["holdings"]:
@@ -340,7 +379,7 @@ def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int)
     target_member["shares_outstanding"] = current_outstanding + num_shares
 
     # Record transaction
-    guild_data["transactions"].append({
+    data["transactions"].append({
         "type": "buy",
         "investor": investor_str,
         "target": target_str,
@@ -352,7 +391,7 @@ def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int)
     })
 
     # Keep only last 100 transactions
-    guild_data["transactions"] = guild_data["transactions"][-100:]
+    data["transactions"] = data["transactions"][-100:]
 
     _save_stocks_data(data)
 
@@ -361,7 +400,7 @@ def buy_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int)
 
 def sell_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int) -> Tuple[bool, str, int, int]:
     """
-    Sell shares in another member
+    Sell shares in another member (GLOBAL - guild_id ignored)
 
     Returns:
         (success, message, total_received, profit_loss)
@@ -370,16 +409,15 @@ def sell_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int
         return False, f"Minimum transaction is {MIN_TRANSACTION} share(s)!", 0, 0
 
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
 
     investor_str = str(investor_id)
     target_str = str(target_id)
 
     # Check if investor has shares
-    if investor_str not in guild_data["portfolios"]:
+    if investor_str not in data["portfolios"]:
         return False, "You don't have any shares to sell!", 0, 0
 
-    portfolio = guild_data["portfolios"][investor_str]
+    portfolio = data["portfolios"][investor_str]
     holding = portfolio["holdings"].get(target_str)
 
     if not holding or holding["shares"] < num_shares:
@@ -387,7 +425,7 @@ def sell_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int
         return False, f"You only have {current} share(s) of this member!", 0, 0
 
     # Get current price
-    target_member = guild_data["members"].get(target_str, {})
+    target_member = data["members"].get(target_str, {})
     current_price = target_member.get("current_price", BASE_STOCK_PRICE)
 
     # Calculate sale value
@@ -400,9 +438,9 @@ def sell_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int
     cost_basis = int(avg_buy * num_shares)
     profit_loss = net_value - cost_basis
 
-    # Add coins to investor
+    # Add coins to investor (use guild_id=0 since economy is now global)
     from utils.economy_db import add_coins
-    add_coins(guild_id, investor_id, net_value, source="stock_sale")
+    add_coins(0, investor_id, net_value, source="stock_sale")
 
     # Update holdings
     holding["shares"] -= num_shares
@@ -418,7 +456,7 @@ def sell_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int
     target_member["shares_outstanding"] = max(0, current_outstanding - num_shares)
 
     # Record transaction
-    guild_data["transactions"].append({
+    data["transactions"].append({
         "type": "sell",
         "investor": investor_str,
         "target": target_str,
@@ -430,7 +468,7 @@ def sell_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int
         "timestamp": datetime.utcnow().isoformat()
     })
 
-    guild_data["transactions"] = guild_data["transactions"][-100:]
+    data["transactions"] = data["transactions"][-100:]
 
     _save_stocks_data(data)
 
@@ -438,12 +476,11 @@ def sell_shares(guild_id: int, investor_id: int, target_id: int, num_shares: int
 
 
 def get_portfolio(guild_id: int, user_id: int) -> Dict:
-    """Get user's investment portfolio"""
+    """Get user's investment portfolio (GLOBAL - guild_id ignored)"""
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
     user_str = str(user_id)
 
-    if user_str not in guild_data["portfolios"]:
+    if user_str not in data["portfolios"]:
         return {
             "holdings": {},
             "total_invested": 0,
@@ -451,7 +488,7 @@ def get_portfolio(guild_id: int, user_id: int) -> Dict:
             "total_profit_loss": 0
         }
 
-    portfolio = guild_data["portfolios"][user_str]
+    portfolio = data["portfolios"][user_str]
     holdings = portfolio.get("holdings", {})
 
     # Calculate current values
@@ -464,7 +501,7 @@ def get_portfolio(guild_id: int, user_id: int) -> Dict:
             continue
 
         # Get current price
-        target_member = guild_data["members"].get(target_str, {})
+        target_member = data["members"].get(target_str, {})
         current_price = target_member.get("current_price", BASE_STOCK_PRICE)
 
         current_value = current_price * shares
@@ -497,16 +534,15 @@ def get_portfolio(guild_id: int, user_id: int) -> Dict:
 
 def get_top_stocks(guild_id: int, limit: int = 10) -> List[Tuple[str, int, int, float]]:
     """
-    Get the top-performing stocks in the guild
+    Get the top-performing stocks (GLOBAL - guild_id ignored)
 
     Returns:
         List of (user_id, current_price, shares_outstanding, price_change_percent)
     """
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
 
     stocks = []
-    for user_str, member in guild_data.get("members", {}).items():
+    for user_str, member in data.get("members", {}).items():
         price = member.get("current_price", BASE_STOCK_PRICE)
         shares = member.get("shares_outstanding", 0)
 
@@ -527,12 +563,11 @@ def get_top_stocks(guild_id: int, limit: int = 10) -> List[Tuple[str, int, int, 
 
 
 def get_most_invested(guild_id: int, limit: int = 10) -> List[Tuple[str, int]]:
-    """Get members with the most shares outstanding (most invested in)"""
+    """Get members with the most shares outstanding (most invested in) (GLOBAL - guild_id ignored)"""
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
 
     invested = []
-    for user_str, member in guild_data.get("members", {}).items():
+    for user_str, member in data.get("members", {}).items():
         shares = member.get("shares_outstanding", 0)
         if shares > 0:
             invested.append((user_str, shares))
@@ -542,13 +577,12 @@ def get_most_invested(guild_id: int, limit: int = 10) -> List[Tuple[str, int]]:
 
 
 def reset_daily_activity(guild_id: int):
-    """Reset all members' daily activity (call at midnight)"""
+    """Reset all members' daily activity (call at midnight) (GLOBAL - guild_id ignored)"""
     data = _load_stocks_data()
-    guild_data = _ensure_guild_data(data, guild_id)
 
     today = _get_today_key()
 
-    for user_str, member in guild_data.get("members", {}).items():
+    for user_str, member in data.get("members", {}).items():
         if member["activity_today"].get("date") != today:
             # Save yesterday's final price as new base (with decay)
             old_price = member.get("current_price", BASE_STOCK_PRICE)

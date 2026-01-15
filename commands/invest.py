@@ -1,5 +1,6 @@
 """
-Community Stock Market Commands - Invest in other members!
+Global Community Stock Market Commands - Invest in other members!
+NOTE: Stock market is GLOBAL - shares carry across all servers!
 
 Commands:
 - /invest @user [shares] - Buy shares in a member
@@ -191,9 +192,9 @@ class Invest(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="portfolio", description="View your investment portfolio")
+    @app_commands.command(name="portfolio", description="View your global investment portfolio")
     async def portfolio(self, interaction: discord.Interaction):
-        """View your investment portfolio"""
+        """View your investment portfolio (global across all servers)"""
 
         logger.info(f"Portfolio viewed by {interaction.user}")
 
@@ -207,7 +208,7 @@ class Invest(commands.Cog):
         portfolio = get_portfolio(interaction.guild.id, interaction.user.id)
 
         embed = discord.Embed(
-            title="Your Investment Portfolio",
+            title="Your Global Investment Portfolio",
             color=discord.Color.blue()
         )
 
@@ -357,9 +358,9 @@ class Invest(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="stockmarket", description="View the community stock market overview")
+    @app_commands.command(name="stockmarket", description="View the global stock market overview")
     async def stockmarket(self, interaction: discord.Interaction):
-        """View stock market overview"""
+        """View global stock market overview"""
 
         logger.info(f"Stock market viewed by {interaction.user}")
 
@@ -371,8 +372,8 @@ class Invest(commands.Cog):
             return
 
         embed = discord.Embed(
-            title="Community Stock Market",
-            description="Invest in active members and watch your portfolio grow!",
+            title="Global Community Stock Market",
+            description="Invest in active members and watch your portfolio grow!\n*Stocks are shared across all servers!*",
             color=discord.Color.gold()
         )
 
