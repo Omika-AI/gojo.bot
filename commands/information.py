@@ -1519,15 +1519,15 @@ class InformationView(View):
         embed.add_field(
             name="📚 Navigation",
             value=(
-                "Use the **Previous** and **Next** buttons below to browse:\n"
-                "• **Page 2:** Features Overview\n"
-                "• **Page 3+:** Command Categories\n"
-                f"• **Page {self.total_pages}:** Credits"
+                "Use the **dropdown menu** below to jump to any section:\n"
+                "• **Features** - Overview of bot capabilities\n"
+                "• **Command Categories** - Detailed command lists\n"
+                "• **Credits** - Acknowledgments"
             ),
             inline=False
         )
 
-        embed.set_footer(text=f"Requested by {self.user} • Use buttons to navigate")
+        embed.set_footer(text=f"Requested by {self.user} • Use dropdown to navigate")
 
         return embed
 
@@ -2085,50 +2085,66 @@ class InformationView(View):
         return embed
 
     def update_buttons(self):
-        """Update button states based on current page"""
+        """Update the dropdown menu with all available pages"""
         self.clear_items()
 
-        # Previous button
-        prev_btn = Button(
-            label="◀️ Previous",
-            style=discord.ButtonStyle.secondary,
-            custom_id="prev_page",
-            disabled=(self.current_page == 1)
+        # Build dropdown options
+        options = [
+            discord.SelectOption(
+                label="About",
+                description="Introduction and bot info",
+                value="1",
+                emoji="📖",
+                default=(self.current_page == 1)
+            ),
+            discord.SelectOption(
+                label="Features",
+                description="Overview of bot features",
+                value="2",
+                emoji="✨",
+                default=(self.current_page == 2)
+            )
+        ]
+
+        # Add category group pages
+        for i, group in enumerate(self.accessible_groups):
+            page_num = i + 3
+            options.append(
+                discord.SelectOption(
+                    label=group["name"],
+                    description=f"{len([c for c in group['categories'] if c in self.accessible_commands])} categories",
+                    value=str(page_num),
+                    emoji=group["emoji"],
+                    default=(self.current_page == page_num)
+                )
+            )
+
+        # Add credits page
+        options.append(
+            discord.SelectOption(
+                label="Credits",
+                description="Credits and acknowledgments",
+                value=str(self.total_pages),
+                emoji="💝",
+                default=(self.current_page == self.total_pages)
+            )
         )
-        prev_btn.callback = self.prev_page
-        self.add_item(prev_btn)
 
-        # Page indicator
-        page_btn = Button(
-            label=f"Page {self.current_page}/{self.total_pages}",
-            style=discord.ButtonStyle.primary,
-            disabled=True
+        # Create the select menu
+        select = discord.ui.Select(
+            placeholder=f"Page {self.current_page}/{self.total_pages} - Select a page...",
+            options=options,
+            custom_id="page_select"
         )
-        self.add_item(page_btn)
+        select.callback = self.on_page_select
+        self.add_item(select)
 
-        # Next button
-        next_btn = Button(
-            label="Next ▶️",
-            style=discord.ButtonStyle.secondary,
-            custom_id="next_page",
-            disabled=(self.current_page == self.total_pages)
-        )
-        next_btn.callback = self.next_page
-        self.add_item(next_btn)
-
-    async def prev_page(self, interaction: discord.Interaction):
-        """Go to previous page"""
-        if self.current_page > 1:
-            self.current_page -= 1
-            self.update_buttons()
-            await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
-
-    async def next_page(self, interaction: discord.Interaction):
-        """Go to next page"""
-        if self.current_page < self.total_pages:
-            self.current_page += 1
-            self.update_buttons()
-            await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
+    async def on_page_select(self, interaction: discord.Interaction):
+        """Handle page selection from dropdown"""
+        selected_page = int(interaction.data["values"][0])
+        self.current_page = selected_page
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_page_embed(), view=self)
 
     async def on_timeout(self):
         """Disable all buttons when the view times out"""
