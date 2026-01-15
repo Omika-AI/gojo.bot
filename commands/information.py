@@ -1331,20 +1331,107 @@ class InformationView(View):
         self.current_page = 1
         self.accessible_commands = get_user_commands(user)
 
-        # Calculate total pages based on accessible categories
-        # Page 1: About, Page 2: Features, then one page per category, then Credits
-        self.categories_with_commands = [
-            cat for cat in [
-                "general", "fun", "games", "profile", "reminders", "economy", "gambling",
-                "music", "karaoke", "achievements", "leveling", "reputation", "shop",
-                "quests", "stocks", "voicechannel", "polls", "giveaways", "reactionroles",
-                "customcommands", "welcome", "goodbye", "autorole", "language",
-                "moderation", "support", "admin", "livealerts", "autonews", "owner"
-            ]
-            if cat in self.accessible_commands
+        # Define category groups to reduce page count
+        # Each group combines related categories into one page
+        self.category_groups = [
+            # Everyone categories
+            {
+                "name": "General & Fun",
+                "emoji": "🎮",
+                "color": discord.Color.blue(),
+                "categories": ["general", "fun", "games"]
+            },
+            {
+                "name": "Profile & Social",
+                "emoji": "🎨",
+                "color": discord.Color.from_rgb(233, 30, 99),
+                "categories": ["profile", "reminders", "reputation"]
+            },
+            {
+                "name": "Economy & Gambling",
+                "emoji": "💰",
+                "color": discord.Color.gold(),
+                "categories": ["economy", "gambling", "shop", "quests", "stocks"]
+            },
+            {
+                "name": "Music & Entertainment",
+                "emoji": "🎵",
+                "color": discord.Color.green(),
+                "categories": ["music", "karaoke"]
+            },
+            {
+                "name": "Leveling & Achievements",
+                "emoji": "📊",
+                "color": discord.Color.from_rgb(88, 101, 242),
+                "categories": ["leveling", "achievements"]
+            },
+            {
+                "name": "Voice Channels",
+                "emoji": "🔊",
+                "color": discord.Color.from_rgb(87, 242, 135),
+                "categories": ["voicechannel"]
+            },
+            # Admin categories
+            {
+                "name": "Giveaways & Polls",
+                "emoji": "🎉",
+                "color": discord.Color.from_rgb(255, 152, 0),
+                "categories": ["giveaways", "polls"]
+            },
+            {
+                "name": "Roles & Custom Commands",
+                "emoji": "🏷️",
+                "color": discord.Color.purple(),
+                "categories": ["reactionroles", "customcommands"]
+            },
+            {
+                "name": "Member Management",
+                "emoji": "👋",
+                "color": discord.Color.from_rgb(76, 175, 80),
+                "categories": ["welcome", "goodbye", "autorole"]
+            },
+            {
+                "name": "Language & Localization",
+                "emoji": "🌍",
+                "color": discord.Color.teal(),
+                "categories": ["language"]
+            },
+            {
+                "name": "Moderation",
+                "emoji": "🛡️",
+                "color": discord.Color.orange(),
+                "categories": ["moderation"]
+            },
+            {
+                "name": "Admin & Tickets",
+                "emoji": "👑",
+                "color": discord.Color.red(),
+                "categories": ["admin", "support"]
+            },
+            {
+                "name": "Feeds & Alerts",
+                "emoji": "📺",
+                "color": discord.Color.from_rgb(255, 69, 0),
+                "categories": ["livealerts", "autonews"]
+            },
+            {
+                "name": "Owner Commands",
+                "emoji": "🔐",
+                "color": discord.Color.dark_red(),
+                "categories": ["owner"]
+            },
         ]
+
+        # Filter groups to only include those with accessible commands
+        self.accessible_groups = []
+        for group in self.category_groups:
+            # Check if user has access to any category in this group
+            has_access = any(cat in self.accessible_commands for cat in group["categories"])
+            if has_access:
+                self.accessible_groups.append(group)
+
         # +3 for About, Features, and Credits pages
-        self.total_pages = 3 + len(self.categories_with_commands)
+        self.total_pages = 3 + len(self.accessible_groups)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Only allow the original user to use the buttons"""
@@ -1366,11 +1453,11 @@ class InformationView(View):
             # Last page is Credits
             return self._build_credits_embed()
         else:
-            # Pages 3 to (total-1) are command categories
-            category_index = self.current_page - 3
-            if 0 <= category_index < len(self.categories_with_commands):
-                category = self.categories_with_commands[category_index]
-                return self._build_category_embed(category)
+            # Pages 3 to (total-1) are command category groups
+            group_index = self.current_page - 3
+            if 0 <= group_index < len(self.accessible_groups):
+                group = self.accessible_groups[group_index]
+                return self._build_group_embed(group)
             return self._build_about_embed()
 
     def _build_about_embed(self) -> discord.Embed:
@@ -1804,8 +1891,66 @@ class InformationView(View):
 
         return embed
 
+    def _build_group_embed(self, group: dict) -> discord.Embed:
+        """Build a command group embed (multiple categories combined)"""
+        embed = discord.Embed(
+            title=f"{group['emoji']} {group['name']}",
+            description=f"**Page {self.current_page}/{self.total_pages}**",
+            color=group['color']
+        )
+
+        if self.bot.user:
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+
+        total_commands = 0
+        field_count = 0
+
+        # Add commands from each category in the group
+        for category in group['categories']:
+            if category not in self.accessible_commands:
+                continue
+
+            commands_list = self.accessible_commands[category]
+            if not commands_list:
+                continue
+
+            cat_info = CATEGORY_INFO.get(category, {"name": category.title(), "emoji": "📁"})
+
+            # Format commands compactly - group them to avoid hitting 25 field limit
+            # Show command name and brief description
+            cmd_lines = []
+            for cmd in commands_list:
+                # Truncate description if too long
+                desc = cmd['description']
+                if len(desc) > 50:
+                    desc = desc[:47] + "..."
+                cmd_lines.append(f"**{cmd['name']}** - {desc}")
+
+            # Split into chunks if too many commands (max ~1024 chars per field value)
+            chunk_size = 6  # commands per field
+            for i in range(0, len(cmd_lines), chunk_size):
+                chunk = cmd_lines[i:i + chunk_size]
+                field_name = f"{cat_info['emoji']} {cat_info['name']}" if i == 0 else f"{cat_info['name']} (cont.)"
+
+                if field_count < 24:  # Leave room for footer info
+                    embed.add_field(
+                        name=field_name,
+                        value="\n".join(chunk),
+                        inline=False
+                    )
+                    field_count += 1
+
+            total_commands += len(commands_list)
+
+        # Show command count
+        embed.set_footer(
+            text=f"{total_commands} command(s) • Requested by {self.user} • Use buttons to navigate"
+        )
+
+        return embed
+
     def _build_category_embed(self, category: str) -> discord.Embed:
-        """Build a command category embed"""
+        """Build a command category embed (single category - legacy)"""
         cat_info = CATEGORY_INFO.get(category, {
             "name": category.title(),
             "emoji": "📁",
