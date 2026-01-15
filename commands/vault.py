@@ -90,6 +90,42 @@ class Vault(commands.Cog):
         description="Manage shared economy vaults"
     )
 
+    async def vault_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete for vault names - shows all vaults"""
+        vaults = get_guild_vaults(interaction.guild.id)
+        choices = []
+        for name, vault in vaults.items():
+            if current.lower() in name.lower():
+                member_count = len(vault.get("members", [])) + 1
+                balance = vault.get("balance", 0)
+                # Show vault name with balance info
+                display = f"{name.title()} ({balance:,} coins, {member_count} members)"
+                choices.append(app_commands.Choice(name=display[:100], value=name))
+        return choices[:25]  # Discord limit
+
+    async def public_vault_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete for public vaults only (for joining)"""
+        vaults = get_guild_vaults(interaction.guild.id)
+        choices = []
+        for name, vault in vaults.items():
+            # Only show public vaults
+            if not vault.get("public"):
+                continue
+            if current.lower() in name.lower():
+                member_count = len(vault.get("members", [])) + 1
+                balance = vault.get("balance", 0)
+                display = f"{name.title()} ({balance:,} coins, {member_count} members)"
+                choices.append(app_commands.Choice(name=display[:100], value=name))
+        return choices[:25]
+
     @vault_group.command(name="create", description="Create a new vault")
     @app_commands.describe(
         name="Name for your vault (no spaces)",
@@ -169,18 +205,26 @@ class Vault(commands.Cog):
         await interaction.response.send_message(embed=embed)
         logger.info(f"Vault '{name}' created by {interaction.user} in {interaction.guild.name}")
 
-    @vault_group.command(name="deposit", description="Deposit coins into your vault")
-    @app_commands.describe(amount="Amount of coins to deposit")
+    @vault_group.command(name="deposit", description="Deposit coins into a vault")
+    @app_commands.describe(
+        vault="The vault to deposit into",
+        amount="Amount of coins to deposit"
+    )
+    @app_commands.autocomplete(vault=vault_autocomplete)
     async def vault_deposit(
         self,
         interaction: discord.Interaction,
+        vault: str,
         amount: app_commands.Range[int, 1, 1000000]
     ):
         """Deposit coins into vault"""
-        vault_name = get_user_vault(interaction.guild.id, interaction.user.id)
-        if not vault_name:
+        vault_name = vault.lower()
+        vaults = get_guild_vaults(interaction.guild.id)
+
+        # Check if vault exists
+        if vault_name not in vaults:
             await interaction.response.send_message(
-                "You're not in a vault! Join one with `/vault join` or create with `/vault create`.",
+                f"Vault **{vault_name}** not found! Use `/vault list` to see available vaults.",
                 ephemeral=True
             )
             return
@@ -194,19 +238,18 @@ class Vault(commands.Cog):
             )
             return
 
-        vaults = get_guild_vaults(interaction.guild.id)
-        vault = vaults[vault_name]
+        vault_data = vaults[vault_name]
 
         # Transfer coins (remove from user, add to vault)
         remove_coins(interaction.guild.id, interaction.user.id, amount)
-        vault["balance"] += amount
-        vault["total_deposited"] += amount
+        vault_data["balance"] += amount
+        vault_data["total_deposited"] += amount
 
         # Track contribution
         user_key = str(interaction.user.id)
-        if user_key not in vault["contributions"]:
-            vault["contributions"][user_key] = 0
-        vault["contributions"][user_key] += amount
+        if user_key not in vault_data["contributions"]:
+            vault_data["contributions"][user_key] = 0
+        vault_data["contributions"][user_key] += amount
 
         save_guild_vaults(interaction.guild.id, vaults)
 
@@ -215,21 +258,21 @@ class Vault(commands.Cog):
             description=f"You deposited **{amount:,}** coins into **{vault_name}**!",
             color=discord.Color.green()
         )
-        embed.add_field(name="Vault Balance", value=f"{vault['balance']:,} coins", inline=True)
-        embed.add_field(name="Your Total Contribution", value=f"{vault['contributions'][user_key]:,} coins", inline=True)
+        embed.add_field(name="Vault Balance", value=f"{vault_data['balance']:,} coins", inline=True)
+        embed.add_field(name="Your Total Contribution", value=f"{vault_data['contributions'][user_key]:,} coins", inline=True)
 
         # Check goal progress
-        if vault.get("goal") and vault["goal"] > 0:
-            progress = (vault["balance"] / vault["goal"]) * 100
+        if vault_data.get("goal") and vault_data["goal"] > 0:
+            progress = (vault_data["balance"] / vault_data["goal"]) * 100
             goal_bar = "█" * int(progress // 10) + "░" * (10 - int(progress // 10))
-            goal_name = vault.get("goal_name", "Goal")
+            goal_name = vault_data.get("goal_name", "Goal")
             embed.add_field(
                 name=f"🎯 {goal_name}",
-                value=f"`{goal_bar}` {progress:.1f}%\n{vault['balance']:,} / {vault['goal']:,}",
+                value=f"`{goal_bar}` {progress:.1f}%\n{vault_data['balance']:,} / {vault_data['goal']:,}",
                 inline=False
             )
 
-            if vault["balance"] >= vault["goal"]:
+            if vault_data["balance"] >= vault_data["goal"]:
                 embed.add_field(
                     name="🎉 GOAL REACHED!",
                     value="Congratulations! The vault has reached its goal!",
@@ -374,11 +417,12 @@ class Vault(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @vault_group.command(name="join", description="Join a public vault")
-    @app_commands.describe(name="Name of the vault to join")
+    @app_commands.describe(vault="The vault to join")
+    @app_commands.autocomplete(vault=public_vault_autocomplete)
     async def vault_join(
         self,
         interaction: discord.Interaction,
-        name: str
+        vault: str
     ):
         """Join a vault"""
         # Check if already in a vault
@@ -390,18 +434,18 @@ class Vault(commands.Cog):
             )
             return
 
-        vault_name = name.lower()
+        vault_name = vault.lower()
         vaults = get_guild_vaults(interaction.guild.id)
-        vault = vaults.get(vault_name)
+        vault_data = vaults.get(vault_name)
 
-        if not vault:
+        if not vault_data:
             await interaction.response.send_message(
-                f"Vault **{vault_name}** not found!",
+                f"Vault **{vault_name}** not found! Use `/vault list` to see available vaults.",
                 ephemeral=True
             )
             return
 
-        if not vault.get("public"):
+        if not vault_data.get("public"):
             await interaction.response.send_message(
                 "This vault is invite-only!",
                 ephemeral=True
@@ -409,9 +453,9 @@ class Vault(commands.Cog):
             return
 
         # Add member
-        if "members" not in vault:
-            vault["members"] = []
-        vault["members"].append(interaction.user.id)
+        if "members" not in vault_data:
+            vault_data["members"] = []
+        vault_data["members"].append(interaction.user.id)
         save_guild_vaults(interaction.guild.id, vaults)
 
         embed = discord.Embed(
@@ -419,8 +463,8 @@ class Vault(commands.Cog):
             description=f"You've joined **{vault_name}**!",
             color=discord.Color.green()
         )
-        embed.add_field(name="Current Balance", value=f"{vault['balance']:,} coins", inline=True)
-        embed.add_field(name="Members", value=str(len(vault["members"]) + 1), inline=True)
+        embed.add_field(name="Current Balance", value=f"{vault_data['balance']:,} coins", inline=True)
+        embed.add_field(name="Members", value=str(len(vault_data["members"]) + 1), inline=True)
         embed.set_footer(text="Use /vault deposit to contribute!")
 
         await interaction.response.send_message(embed=embed)
