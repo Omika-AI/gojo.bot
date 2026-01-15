@@ -181,7 +181,7 @@ def format_progress_bar(current: int, goal: int, bar_length: int = 10) -> str:
 # =============================================================================
 
 class ProfileView(View):
-    """View with buttons to navigate between profile pages"""
+    """Polished profile view with tab-style navigation"""
 
     def __init__(self, bot: commands.Bot, target_user: discord.Member, requester: discord.Member, guild_id: int, timeout: float = 180):
         super().__init__(timeout=timeout)
@@ -191,7 +191,6 @@ class ProfileView(View):
         self.guild_id = guild_id
         self.current_page = 1
         self.total_pages = 3
-        self.card_image = None  # Cache for profile card
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Only allow the original requester to use the buttons"""
@@ -244,13 +243,12 @@ class ProfileView(View):
         buffer = image_to_bytes(card)
         file = discord.File(buffer, filename="profile.png")
 
-        embed = discord.Embed(
-            title=f"📊 {user.display_name}'s Profile",
-            description="**Page 1/3** - Profile Card",
-            color=discord.Color.from_rgb(*accent_color)
+        embed = discord.Embed(color=discord.Color.from_rgb(*accent_color))
+        embed.set_author(
+            name=f"{user.display_name}'s Profile",
+            icon_url=user.display_avatar.url
         )
         embed.set_image(url="attachment://profile.png")
-        embed.set_footer(text="Use buttons to view Stats and Achievements")
 
         return embed, file
 
@@ -273,65 +271,91 @@ class ProfileView(View):
         color = get_user_color(user.id)
         embed_color = discord.Color.from_rgb(*color)
 
-        embed = discord.Embed(
-            title=f"{banner['emoji']} {user.display_name}'s Stats",
-            description="**Page 2/3** - Detailed Statistics",
-            color=embed_color
+        embed = discord.Embed(color=embed_color)
+        embed.set_author(
+            name=f"{user.display_name}'s Statistics",
+            icon_url=user.display_avatar.url
         )
         embed.set_thumbnail(url=user.display_avatar.url)
 
-        # Motto
+        # Motto (if set)
         if profile.get("motto"):
-            embed.add_field(
-                name="💭 Motto",
-                value=f"*\"{profile['motto']}\"*",
-                inline=False
-            )
+            embed.description = f"*\"{profile['motto']}\"*"
 
-        # Level stats
-        xp_progress = format_progress_bar(level_data['xp'], level_data['xp_needed'], 10)
-        embed.add_field(
-            name="📊 Level & XP",
-            value=f"Level **{level_data['level']}** (Rank #{level_data['rank']})\n`{xp_progress}` {level_data['xp']:,}/{level_data['xp_needed']:,} XP",
-            inline=True
+        # ═══════════════════════════════════════
+        # LEVELING SECTION
+        # ═══════════════════════════════════════
+        xp_pct = (level_data['xp'] / level_data['xp_needed']) * 100 if level_data['xp_needed'] > 0 else 0
+        xp_bar = "▓" * int(xp_pct // 10) + "░" * (10 - int(xp_pct // 10))
+
+        level_text = (
+            f"```\n"
+            f"Level {level_data['level']:>3}  •  Rank #{level_data['rank']}\n"
+            f"[{xp_bar}] {xp_pct:.0f}%\n"
+            f"{level_data['xp']:,} / {level_data['xp_needed']:,} XP\n"
+            f"```"
         )
+        embed.add_field(name="📊 Level Progress", value=level_text, inline=False)
 
-        # Economy
+        # ═══════════════════════════════════════
+        # ECONOMY & REPUTATION
+        # ═══════════════════════════════════════
         daily_streak = economy_stats.get("daily_streak", 0)
+        streak_emoji = "🔥" if daily_streak > 0 else "❄️"
+
         embed.add_field(
-            name="💰 Economy",
-            value=f"**{balance:,}** coins\n🔥 {daily_streak} day streak",
+            name="💰 Balance",
+            value=f"**{balance:,}**\ncoins",
             inline=True
         )
-
-        # Reputation
         embed.add_field(
             name="⭐ Reputation",
-            value=f"**{reputation}** rep points",
+            value=f"**{reputation}**\npoints",
+            inline=True
+        )
+        embed.add_field(
+            name=f"{streak_emoji} Daily Streak",
+            value=f"**{daily_streak}**\ndays",
             inline=True
         )
 
-        # Activity
+        # ═══════════════════════════════════════
+        # ACTIVITY STATS
+        # ═══════════════════════════════════════
         voice_hours = level_data['voice_minutes'] // 60
         voice_mins = level_data['voice_minutes'] % 60
+
         embed.add_field(
-            name="💬 Activity",
-            value=f"**{level_data['messages']:,}** messages\n🎧 {voice_hours}h {voice_mins}m voice",
+            name="💬 Messages",
+            value=f"**{level_data['messages']:,}**",
+            inline=True
+        )
+        embed.add_field(
+            name="🎧 Voice Time",
+            value=f"**{voice_hours}h {voice_mins}m**",
+            inline=True
+        )
+        embed.add_field(
+            name="🎨 Banner",
+            value=f"{banner['emoji']} {banner['name']}",
             inline=True
         )
 
-        # Gambling stats
+        # ═══════════════════════════════════════
+        # GAMBLING STATS
+        # ═══════════════════════════════════════
         total_won = economy_stats.get("total_won", 0)
         total_lost = economy_stats.get("total_lost", 0)
         net = total_won - total_lost
+        net_emoji = "📈" if net >= 0 else "📉"
         net_text = f"+{net:,}" if net >= 0 else f"{net:,}"
-        embed.add_field(
-            name="🎰 Gambling",
-            value=f"Won: **{total_won:,}**\nLost: **{total_lost:,}**\nNet: **{net_text}**",
-            inline=True
-        )
 
-        # Featured badges
+        gambling_text = f"Won: **{total_won:,}** • Lost: **{total_lost:,}** • Net: {net_emoji} **{net_text}**"
+        embed.add_field(name="🎰 Gambling Stats", value=gambling_text, inline=False)
+
+        # ═══════════════════════════════════════
+        # FEATURED BADGES
+        # ═══════════════════════════════════════
         featured = profile.get("featured_badges", [])
         if featured:
             badge_text = []
@@ -342,11 +366,9 @@ class ProfileView(View):
             if badge_text:
                 embed.add_field(
                     name="🏅 Featured Badges",
-                    value="\n".join(badge_text),
-                    inline=True
+                    value=" • ".join(badge_text),
+                    inline=False
                 )
-
-        embed.set_footer(text="Use buttons to navigate • Page 2/3")
 
         return embed
 
@@ -369,19 +391,15 @@ class ProfileView(View):
         color = get_user_color(user.id)
         embed_color = discord.Color.from_rgb(*color)
 
-        embed = discord.Embed(
-            title=f"🏆 {user.display_name}'s Achievements",
-            description="**Page 3/3** - Achievement Progress",
-            color=embed_color
+        embed = discord.Embed(color=embed_color)
+        embed.set_author(
+            name=f"{user.display_name}'s Achievements",
+            icon_url=user.display_avatar.url
         )
         embed.set_thumbnail(url=user.display_avatar.url)
 
         if not has_achievements:
-            embed.add_field(
-                name="❌ Achievements Not Available",
-                value="Achievement system not configured.",
-                inline=False
-            )
+            embed.description = "Achievement system not configured."
             return embed
 
         # Get achievement data
@@ -392,67 +410,83 @@ class ProfileView(View):
         # Count completed
         completed_count = len(completed)
         total_count = len(all_achievements)
+        completion_pct = (completed_count / total_count * 100) if total_count > 0 else 0
 
-        embed.description = f"**Page 3/3** - Achievement Progress\n🏆 **{completed_count}/{total_count}** achievements unlocked"
+        # Header with overall progress
+        progress_bar = "▓" * int(completion_pct // 10) + "░" * (10 - int(completion_pct // 10))
+        embed.description = (
+            f"**Overall Progress**\n"
+            f"`[{progress_bar}]` {completion_pct:.0f}%\n"
+            f"🏆 **{completed_count}** / **{total_count}** achievements unlocked"
+        )
 
-        # Show completed achievements (compact)
+        # ═══════════════════════════════════════
+        # COMPLETED ACHIEVEMENTS
+        # ═══════════════════════════════════════
         if completed:
             completed_list = []
             for achievement in all_achievements:
                 if achievement.id in completed:
-                    completed_list.append(f"{achievement.emoji} {achievement.name}")
+                    completed_list.append(f"{achievement.emoji}")
 
-            completed_text = " • ".join(completed_list[:8])
-            if len(completed_list) > 8:
-                completed_text += f" • *+{len(completed_list) - 8} more*"
+            # Show as emoji row (compact)
+            completed_text = " ".join(completed_list[:15])
+            if len(completed_list) > 15:
+                completed_text += f" +{len(completed_list) - 15}"
 
             embed.add_field(
-                name=f"✅ Completed ({completed_count})",
+                name=f"✅ Unlocked ({completed_count})",
                 value=completed_text if completed_text else "None yet!",
                 inline=False
             )
 
-        # Show progress on incomplete achievements (detailed)
+        # ═══════════════════════════════════════
+        # IN-PROGRESS ACHIEVEMENTS
+        # ═══════════════════════════════════════
         locked = [a for a in all_achievements if a.id not in completed]
         if locked:
-            progress_list = []
-            for achievement in locked[:6]:  # Show top 6 incomplete
+            # Sort by closest to completion
+            progress_data = []
+            for achievement in locked:
                 current, goal, percentage = get_user_achievement_progress(user.id, achievement.id)
-                bar = format_progress_bar(current, goal, bar_length=8)
+                progress_data.append((achievement, current, goal, percentage))
+
+            # Sort by percentage (highest first)
+            progress_data.sort(key=lambda x: x[3], reverse=True)
+
+            progress_lines = []
+            for achievement, current, goal, percentage in progress_data[:5]:
+                bar_filled = int(percentage // 20)  # 5 char bar
+                bar = "▓" * bar_filled + "░" * (5 - bar_filled)
                 stat_display = format_stat_display(achievement.stat_key, current)
                 goal_display = format_stat_display(achievement.stat_key, goal)
-                progress_list.append(
+                progress_lines.append(
                     f"{achievement.emoji} **{achievement.name}**\n"
-                    f"`{bar}` {stat_display}/{goal_display} ({percentage:.0f}%)"
+                    f"└ `[{bar}]` {stat_display} / {goal_display}"
                 )
 
             embed.add_field(
                 name=f"🔒 In Progress ({len(locked)} remaining)",
-                value="\n".join(progress_list),
+                value="\n".join(progress_lines) if progress_lines else "All achievements unlocked!",
                 inline=False
             )
 
-            if len(locked) > 6:
-                embed.add_field(
-                    name="📋 More Locked",
-                    value=f"*{len(locked) - 6} more achievements to unlock...*",
-                    inline=False
-                )
-
-        # Quick stats
+        # ═══════════════════════════════════════
+        # QUICK STATS
+        # ═══════════════════════════════════════
         messages = achievement_stats.get("messages_sent", 0)
         voice_time = achievement_stats.get("voice_time", 0)
         voice_hours = voice_time / 3600
         gambling_wins = achievement_stats.get("gambling_winnings", 0)
         max_streak = achievement_stats.get("max_win_streak", 0)
 
-        embed.add_field(
-            name="📊 Your Stats",
-            value=f"💬 {messages:,} msgs • 🎧 {voice_hours:.1f}h voice • 💰 {gambling_wins:,} won • 🍀 {max_streak} streak",
-            inline=False
+        stats_text = (
+            f"💬 `{messages:,}` messages\n"
+            f"🎧 `{voice_hours:.1f}h` voice time\n"
+            f"💰 `{gambling_wins:,}` gambling wins\n"
+            f"🍀 `{max_streak}` best win streak"
         )
-
-        embed.set_footer(text="Keep playing to unlock more achievements!")
+        embed.add_field(name="📊 Your Stats", value=stats_text, inline=False)
 
         return embed
 
@@ -460,48 +494,72 @@ class ProfileView(View):
         """Update button states based on current page"""
         self.clear_items()
 
-        # Previous page button
-        prev_btn = Button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
-        prev_btn.disabled = (self.current_page == 1)
-        prev_btn.callback = self.prev_page
-        self.add_item(prev_btn)
-
-        # Page labels
-        page_labels = ["Card", "Stats", "Achievements"]
-        page_btn = Button(
-            label=f"{self.current_page}/3 - {page_labels[self.current_page - 1]}",
-            style=discord.ButtonStyle.primary,
-            disabled=True
+        # Tab-style buttons for each page
+        card_btn = Button(
+            label="Card",
+            emoji="🖼️",
+            style=discord.ButtonStyle.primary if self.current_page == 1 else discord.ButtonStyle.secondary,
+            row=0
         )
-        self.add_item(page_btn)
+        card_btn.callback = self.go_to_card
+        self.add_item(card_btn)
 
-        # Next page button
-        next_btn = Button(label="Next ▶️", style=discord.ButtonStyle.secondary)
-        next_btn.disabled = (self.current_page == self.total_pages)
-        next_btn.callback = self.next_page
-        self.add_item(next_btn)
+        stats_btn = Button(
+            label="Stats",
+            emoji="📊",
+            style=discord.ButtonStyle.primary if self.current_page == 2 else discord.ButtonStyle.secondary,
+            row=0
+        )
+        stats_btn.callback = self.go_to_stats
+        self.add_item(stats_btn)
 
-    async def prev_page(self, interaction: discord.Interaction):
-        """Go to previous page"""
-        if self.current_page > 1:
-            self.current_page -= 1
-            self.update_buttons()
-            embed, file = await self.get_page_content(interaction)
-            if file:
-                await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
-            else:
-                await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+        achievements_btn = Button(
+            label="Achievements",
+            emoji="🏆",
+            style=discord.ButtonStyle.primary if self.current_page == 3 else discord.ButtonStyle.secondary,
+            row=0
+        )
+        achievements_btn.callback = self.go_to_achievements
+        self.add_item(achievements_btn)
 
-    async def next_page(self, interaction: discord.Interaction):
-        """Go to next page"""
-        if self.current_page < self.total_pages:
-            self.current_page += 1
-            self.update_buttons()
-            embed, file = await self.get_page_content(interaction)
-            if file:
-                await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
-            else:
-                await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+        # Close button
+        close_btn = Button(
+            label="Close",
+            emoji="✖️",
+            style=discord.ButtonStyle.danger,
+            row=0
+        )
+        close_btn.callback = self.close_view
+        self.add_item(close_btn)
+
+    async def go_to_card(self, interaction: discord.Interaction):
+        """Go to profile card page"""
+        self.current_page = 1
+        self.update_buttons()
+        embed, file = await self.get_page_content(interaction)
+        if file:
+            await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+
+    async def go_to_stats(self, interaction: discord.Interaction):
+        """Go to stats page"""
+        self.current_page = 2
+        self.update_buttons()
+        embed, file = await self.get_page_content(interaction)
+        await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+
+    async def go_to_achievements(self, interaction: discord.Interaction):
+        """Go to achievements page"""
+        self.current_page = 3
+        self.update_buttons()
+        embed, file = await self.get_page_content(interaction)
+        await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+
+    async def close_view(self, interaction: discord.Interaction):
+        """Close the profile view"""
+        await interaction.message.delete()
+        self.stop()
 
     async def on_timeout(self):
         """Disable all buttons when the view times out"""
