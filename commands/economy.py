@@ -263,16 +263,17 @@ class Economy(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="givecoins", description="Give coins to a user (Admin only)")
+    @app_commands.command(name="givecoins", description="Give coins to a user (Owner only)")
     @app_commands.describe(user="The user to give coins to")
     async def givecoins(self, interaction: discord.Interaction, user: discord.Member):
-        """Admin command to give coins to a user"""
+        """Owner command to give coins to a user"""
         log_command(str(interaction.user), interaction.user.id, f"givecoins {user}", interaction.guild.name)
 
-        # Check admin permission
-        if not interaction.user.guild_permissions.administrator:
+        # Only allow specific user IDs to use this command
+        allowed_users = [324070041601441813, 259024292329684994]
+        if interaction.user.id not in allowed_users:
             await interaction.response.send_message(
-                "You need **Administrator** permission to use this command!",
+                "You don't have permission to use this command!",
                 ephemeral=True
             )
             return
