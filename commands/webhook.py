@@ -1353,7 +1353,7 @@ class WebhookMainView(View):
             return False
         return True
 
-    @discord.ui.button(label="Create & Send Webhook", style=discord.ButtonStyle.success, emoji="✉️")
+    @discord.ui.button(label="Create & Send Webhook", style=discord.ButtonStyle.success, emoji="✉️", row=0)
     async def create_webhook(self, interaction: discord.Interaction, button: Button):
         """Open the webhook builder to create and send messages"""
         # Initialize builder state
@@ -1391,7 +1391,7 @@ class WebhookMainView(View):
             view=WebhookSelectView(interaction.user.id, interaction.channel)
         )
 
-    @discord.ui.button(label="Edit Existing Message", style=discord.ButtonStyle.primary, emoji="✏️")
+    @discord.ui.button(label="Edit Existing Message", style=discord.ButtonStyle.primary, emoji="✏️", row=0)
     async def edit_webhook(self, interaction: discord.Interaction, button: Button):
         """Open prompt to edit an existing webhook message"""
         embed = discord.Embed(
@@ -1411,6 +1411,12 @@ class WebhookMainView(View):
             view=WebhookEditLinkView(interaction.user.id, self.bot)
         )
 
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, emoji="✖️", row=1)
+    async def close_panel(self, interaction: discord.Interaction, button: Button):
+        """Close the webhook panel"""
+        await interaction.message.delete()
+        self.stop()
+
 
 class WebhookEditLinkView(View):
     """View for entering a message link to edit"""
@@ -1429,12 +1435,12 @@ class WebhookEditLinkView(View):
             return False
         return True
 
-    @discord.ui.button(label="Enter Message Link", style=discord.ButtonStyle.primary, emoji="🔗")
+    @discord.ui.button(label="Enter Message Link", style=discord.ButtonStyle.primary, emoji="🔗", row=0)
     async def enter_link(self, interaction: discord.Interaction, button: Button):
         """Open modal to enter message link"""
         await interaction.response.send_modal(WebhookEditLinkModal(self.bot))
 
-    @discord.ui.button(label="Back", style=discord.ButtonStyle.secondary, emoji="⬅️")
+    @discord.ui.button(label="Back", style=discord.ButtonStyle.secondary, emoji="⬅️", row=0)
     async def back(self, interaction: discord.Interaction, button: Button):
         """Go back to main menu"""
         embed = discord.Embed(
@@ -1457,6 +1463,12 @@ class WebhookEditLinkView(View):
             embed=embed,
             view=WebhookMainView(self.user_id, self.bot)
         )
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, emoji="✖️", row=1)
+    async def close_panel(self, interaction: discord.Interaction, button: Button):
+        """Close the webhook panel"""
+        await interaction.message.delete()
+        self.stop()
 
 
 class WebhookEditLinkModal(Modal):
