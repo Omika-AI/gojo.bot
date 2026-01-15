@@ -272,6 +272,29 @@ COMMANDS_REGISTRY = [
         "permission": None
     },
 
+    # Leveling Commands (Everyone can use)
+    {
+        "name": "/rank",
+        "description": "View your level and XP with a beautiful graphical rank card",
+        "usage": "/rank or /rank @user",
+        "category": "leveling",
+        "permission": None
+    },
+    {
+        "name": "/xpleaderboard",
+        "description": "View the server's XP leaderboard sorted by total XP",
+        "usage": "/xpleaderboard or /xpleaderboard page:2",
+        "category": "leveling",
+        "permission": None
+    },
+    {
+        "name": "/levels",
+        "description": "View XP requirements for each level and milestone rewards",
+        "usage": "/levels",
+        "category": "leveling",
+        "permission": None
+    },
+
     # Moderation Commands (Require specific permissions)
     {
         "name": "/moderationpanel",
@@ -486,6 +509,11 @@ CATEGORY_INFO = {
         "emoji": "🏆",
         "description": "Track progress and unlock achievements"
     },
+    "leveling": {
+        "name": "Leveling Commands",
+        "emoji": "📊",
+        "description": "XP, levels, and rank cards"
+    },
     "moderation": {
         "name": "Moderation Commands",
         "emoji": "🛡️",
@@ -543,7 +571,7 @@ class InformationView(View):
         # Calculate total pages based on accessible categories
         # Page 1: About, Page 2: Features, then one page per category, then Credits
         self.categories_with_commands = [
-            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "moderation", "support", "admin", "owner"]
+            cat for cat in ["general", "fun", "economy", "gambling", "music", "karaoke", "achievements", "leveling", "moderation", "support", "admin", "owner"]
             if cat in self.accessible_commands
         ]
         # +3 for About, Features, and Credits pages
@@ -729,6 +757,20 @@ class InformationView(View):
             inline=False
         )
 
+        # Leveling System (Everyone)
+        embed.add_field(
+            name="📊 Leveling System",
+            value=(
+                "• **Earn XP** - Get XP for messages (15-25 XP) and voice chat (10 XP/min)\n"
+                "• **Level Up** - Progress through levels with increasing XP requirements\n"
+                "• **Rank Cards** - Beautiful graphical rank cards with your avatar & stats\n"
+                "• **XP Leaderboard** - Compete for the top spot in your server\n"
+                "• **Milestone Rewards** - Earn bonus coins at levels 5, 10, 20, 50, 100!\n"
+                "• **Level 10: 5,000 coins** - Plus other milestone bonuses"
+            ),
+            inline=False
+        )
+
         # Fun Features (Everyone)
         embed.add_field(
             name="🎮 Fun & Entertainment",
@@ -832,6 +874,7 @@ class InformationView(View):
             "music": discord.Color.green(),
             "karaoke": discord.Color.magenta(),
             "achievements": discord.Color.from_rgb(255, 165, 0),  # Orange/Gold
+            "leveling": discord.Color.from_rgb(88, 101, 242),  # Discord Blurple
             "moderation": discord.Color.orange(),
             "admin": discord.Color.red(),
             "owner": discord.Color.dark_red()

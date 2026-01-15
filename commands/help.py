@@ -115,6 +115,14 @@ class Help(commands.Cog):
             inline=False
         )
 
+        # Leveling Commands (Everyone)
+        leveling_cmds = "`/rank` `/xpleaderboard` `/levels`"
+        embed.add_field(
+            name="📊 Leveling",
+            value=leveling_cmds,
+            inline=False
+        )
+
         # Moderation Commands (Mods only)
         if is_mod or is_admin:
             mod_cmds = "`/moderationpanel` `/timeout` `/warning` `/modtalk` `/moderationlogs` `/modstats` `/userhistory` `/modactivity` `/clearqueue`"
