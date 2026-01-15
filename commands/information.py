@@ -74,6 +74,13 @@ COMMANDS_REGISTRY = [
         "category": "general",
         "permission": None
     },
+    {
+        "name": "/invitebot",
+        "description": "Get the link to add Gojo to your server",
+        "usage": "/invitebot",
+        "category": "general",
+        "permission": None
+    },
 
     # Games Commands (Everyone can use)
     {
