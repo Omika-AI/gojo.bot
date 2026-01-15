@@ -2,7 +2,7 @@
 Graphical Profile System - Visual profile cards with combined stats
 
 Commands:
-- /profile - View your graphical profile card
+- /profile - View your graphical profile card with pagination
 - /profile user - View another user's profile
 - /profilecolor - Change your profile accent color
 - /profilemotto - Set your profile motto
@@ -13,13 +13,14 @@ Commands:
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import View, Button
 from typing import Optional, Literal
 import json
 import os
 
 from utils.card_generator import create_profile_card, image_to_bytes, COLORS
 from utils.leveling_db import get_user_level_data
-from utils.economy_db import get_balance
+from utils.economy_db import get_balance, get_user_stats as get_economy_stats
 from utils.reputation_db import get_rep_points
 from utils.logger import logger
 
@@ -165,20 +166,363 @@ def set_user_color(user_id: int, color: tuple):
     save_user_profile(user_id, profile)
 
 
+def format_progress_bar(current: int, goal: int, bar_length: int = 10) -> str:
+    """Create a text-based progress bar"""
+    if goal <= 0:
+        return "█" * bar_length
+    percentage = min(current / goal, 1.0)
+    filled = int(bar_length * percentage)
+    empty = bar_length - filled
+    return "█" * filled + "░" * empty
+
+
+# =============================================================================
+# PROFILE VIEW WITH PAGINATION
+# =============================================================================
+
+class ProfileView(View):
+    """View with buttons to navigate between profile pages"""
+
+    def __init__(self, bot: commands.Bot, target_user: discord.Member, requester: discord.Member, guild_id: int, timeout: float = 180):
+        super().__init__(timeout=timeout)
+        self.bot = bot
+        self.target_user = target_user
+        self.requester = requester
+        self.guild_id = guild_id
+        self.current_page = 1
+        self.total_pages = 3
+        self.card_image = None  # Cache for profile card
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only allow the original requester to use the buttons"""
+        if interaction.user.id != self.requester.id:
+            await interaction.response.send_message(
+                "This isn't your profile view! Use `/profile` to open your own.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    async def get_page_content(self, interaction: discord.Interaction = None):
+        """Get the content for the current page - returns (embed, file) tuple"""
+        if self.current_page == 1:
+            return await self._build_card_page()
+        elif self.current_page == 2:
+            return self._build_stats_page(), None
+        elif self.current_page == 3:
+            return self._build_achievements_page(), None
+        return await self._build_card_page()
+
+    async def _build_card_page(self):
+        """Build the graphical profile card page (Page 1)"""
+        user = self.target_user
+
+        # Gather data
+        level_data = get_user_level_data(self.guild_id, user.id)
+        balance = get_balance(self.guild_id, user.id)
+        reputation = get_rep_points(self.guild_id, user.id)
+        achievements = get_user_achievements(self.guild_id, user.id)
+        accent_color = get_user_color(user.id)
+
+        # Generate profile card
+        card = await create_profile_card(
+            avatar_url=user.display_avatar.url,
+            username=user.display_name,
+            level=level_data["level"],
+            xp=level_data["xp"],
+            xp_needed=level_data["xp_needed"],
+            balance=balance,
+            reputation=reputation,
+            rank=level_data["rank"],
+            achievements_unlocked=achievements,
+            total_achievements=TOTAL_ACHIEVEMENTS,
+            messages=level_data["messages"],
+            voice_hours=level_data["voice_minutes"] // 60,
+            accent_color=accent_color
+        )
+
+        buffer = image_to_bytes(card)
+        file = discord.File(buffer, filename="profile.png")
+
+        embed = discord.Embed(
+            title=f"📊 {user.display_name}'s Profile",
+            description="**Page 1/3** - Profile Card",
+            color=discord.Color.from_rgb(*accent_color)
+        )
+        embed.set_image(url="attachment://profile.png")
+        embed.set_footer(text="Use buttons to view Stats and Achievements")
+
+        return embed, file
+
+    def _build_stats_page(self) -> discord.Embed:
+        """Build the stats overview page (Page 2)"""
+        user = self.target_user
+
+        # Get all data
+        level_data = get_user_level_data(self.guild_id, user.id)
+        balance = get_balance(self.guild_id, user.id)
+        reputation = get_rep_points(self.guild_id, user.id)
+        profile = get_user_profile(user.id)
+        economy_stats = get_economy_stats(self.guild_id, user.id)
+
+        # Get banner info
+        banner_id = profile.get("banner", "default")
+        banner = PROFILE_BANNERS.get(banner_id, PROFILE_BANNERS["default"])
+
+        # Get color
+        color = get_user_color(user.id)
+        embed_color = discord.Color.from_rgb(*color)
+
+        embed = discord.Embed(
+            title=f"{banner['emoji']} {user.display_name}'s Stats",
+            description="**Page 2/3** - Detailed Statistics",
+            color=embed_color
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        # Motto
+        if profile.get("motto"):
+            embed.add_field(
+                name="💭 Motto",
+                value=f"*\"{profile['motto']}\"*",
+                inline=False
+            )
+
+        # Level stats
+        xp_progress = format_progress_bar(level_data['xp'], level_data['xp_needed'], 10)
+        embed.add_field(
+            name="📊 Level & XP",
+            value=f"Level **{level_data['level']}** (Rank #{level_data['rank']})\n`{xp_progress}` {level_data['xp']:,}/{level_data['xp_needed']:,} XP",
+            inline=True
+        )
+
+        # Economy
+        daily_streak = economy_stats.get("daily_streak", 0)
+        embed.add_field(
+            name="💰 Economy",
+            value=f"**{balance:,}** coins\n🔥 {daily_streak} day streak",
+            inline=True
+        )
+
+        # Reputation
+        embed.add_field(
+            name="⭐ Reputation",
+            value=f"**{reputation}** rep points",
+            inline=True
+        )
+
+        # Activity
+        voice_hours = level_data['voice_minutes'] // 60
+        voice_mins = level_data['voice_minutes'] % 60
+        embed.add_field(
+            name="💬 Activity",
+            value=f"**{level_data['messages']:,}** messages\n🎧 {voice_hours}h {voice_mins}m voice",
+            inline=True
+        )
+
+        # Gambling stats
+        total_won = economy_stats.get("total_won", 0)
+        total_lost = economy_stats.get("total_lost", 0)
+        net = total_won - total_lost
+        net_text = f"+{net:,}" if net >= 0 else f"{net:,}"
+        embed.add_field(
+            name="🎰 Gambling",
+            value=f"Won: **{total_won:,}**\nLost: **{total_lost:,}**\nNet: **{net_text}**",
+            inline=True
+        )
+
+        # Featured badges
+        featured = profile.get("featured_badges", [])
+        if featured:
+            badge_text = []
+            for bid in featured[:3]:
+                if bid in PROFILE_BADGES:
+                    info = PROFILE_BADGES[bid]
+                    badge_text.append(f"{info['emoji']} {info['name']}")
+            if badge_text:
+                embed.add_field(
+                    name="🏅 Featured Badges",
+                    value="\n".join(badge_text),
+                    inline=True
+                )
+
+        embed.set_footer(text="Use buttons to navigate • Page 2/3")
+
+        return embed
+
+    def _build_achievements_page(self) -> discord.Embed:
+        """Build the achievements progress page (Page 3)"""
+        user = self.target_user
+
+        # Import achievements data
+        try:
+            from utils.achievements_data import (
+                get_user_stats as get_achievement_stats,
+                get_all_achievements,
+                get_user_achievement_progress,
+                format_stat_display
+            )
+            has_achievements = True
+        except ImportError:
+            has_achievements = False
+
+        color = get_user_color(user.id)
+        embed_color = discord.Color.from_rgb(*color)
+
+        embed = discord.Embed(
+            title=f"🏆 {user.display_name}'s Achievements",
+            description="**Page 3/3** - Achievement Progress",
+            color=embed_color
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+        if not has_achievements:
+            embed.add_field(
+                name="❌ Achievements Not Available",
+                value="Achievement system not configured.",
+                inline=False
+            )
+            return embed
+
+        # Get achievement data
+        achievement_stats = get_achievement_stats(user.id)
+        completed = achievement_stats.get("completed_achievements", [])
+        all_achievements = get_all_achievements()
+
+        # Count completed
+        completed_count = len(completed)
+        total_count = len(all_achievements)
+
+        embed.description = f"**Page 3/3** - Achievement Progress\n🏆 **{completed_count}/{total_count}** achievements unlocked"
+
+        # Show completed achievements (compact)
+        if completed:
+            completed_list = []
+            for achievement in all_achievements:
+                if achievement.id in completed:
+                    completed_list.append(f"{achievement.emoji} {achievement.name}")
+
+            completed_text = " • ".join(completed_list[:8])
+            if len(completed_list) > 8:
+                completed_text += f" • *+{len(completed_list) - 8} more*"
+
+            embed.add_field(
+                name=f"✅ Completed ({completed_count})",
+                value=completed_text if completed_text else "None yet!",
+                inline=False
+            )
+
+        # Show progress on incomplete achievements (detailed)
+        locked = [a for a in all_achievements if a.id not in completed]
+        if locked:
+            progress_list = []
+            for achievement in locked[:6]:  # Show top 6 incomplete
+                current, goal, percentage = get_user_achievement_progress(user.id, achievement.id)
+                bar = format_progress_bar(current, goal, bar_length=8)
+                stat_display = format_stat_display(achievement.stat_key, current)
+                goal_display = format_stat_display(achievement.stat_key, goal)
+                progress_list.append(
+                    f"{achievement.emoji} **{achievement.name}**\n"
+                    f"`{bar}` {stat_display}/{goal_display} ({percentage:.0f}%)"
+                )
+
+            embed.add_field(
+                name=f"🔒 In Progress ({len(locked)} remaining)",
+                value="\n".join(progress_list),
+                inline=False
+            )
+
+            if len(locked) > 6:
+                embed.add_field(
+                    name="📋 More Locked",
+                    value=f"*{len(locked) - 6} more achievements to unlock...*",
+                    inline=False
+                )
+
+        # Quick stats
+        messages = achievement_stats.get("messages_sent", 0)
+        voice_time = achievement_stats.get("voice_time", 0)
+        voice_hours = voice_time / 3600
+        gambling_wins = achievement_stats.get("gambling_winnings", 0)
+        max_streak = achievement_stats.get("max_win_streak", 0)
+
+        embed.add_field(
+            name="📊 Your Stats",
+            value=f"💬 {messages:,} msgs • 🎧 {voice_hours:.1f}h voice • 💰 {gambling_wins:,} won • 🍀 {max_streak} streak",
+            inline=False
+        )
+
+        embed.set_footer(text="Keep playing to unlock more achievements!")
+
+        return embed
+
+    def update_buttons(self):
+        """Update button states based on current page"""
+        self.clear_items()
+
+        # Previous page button
+        prev_btn = Button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+        prev_btn.disabled = (self.current_page == 1)
+        prev_btn.callback = self.prev_page
+        self.add_item(prev_btn)
+
+        # Page labels
+        page_labels = ["Card", "Stats", "Achievements"]
+        page_btn = Button(
+            label=f"{self.current_page}/3 - {page_labels[self.current_page - 1]}",
+            style=discord.ButtonStyle.primary,
+            disabled=True
+        )
+        self.add_item(page_btn)
+
+        # Next page button
+        next_btn = Button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+        next_btn.disabled = (self.current_page == self.total_pages)
+        next_btn.callback = self.next_page
+        self.add_item(next_btn)
+
+    async def prev_page(self, interaction: discord.Interaction):
+        """Go to previous page"""
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.update_buttons()
+            embed, file = await self.get_page_content(interaction)
+            if file:
+                await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+            else:
+                await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+
+    async def next_page(self, interaction: discord.Interaction):
+        """Go to next page"""
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self.update_buttons()
+            embed, file = await self.get_page_content(interaction)
+            if file:
+                await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+            else:
+                await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+
+    async def on_timeout(self):
+        """Disable all buttons when the view times out"""
+        for item in self.children:
+            item.disabled = True
+
+
 class Profile(commands.Cog):
     """Graphical profile card system"""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="profile", description="View your graphical profile card")
+    @app_commands.command(name="profile", description="View your graphical profile card with stats and achievements")
     @app_commands.describe(user="The user to view (leave empty for yourself)")
     async def profile(
         self,
         interaction: discord.Interaction,
         user: Optional[discord.Member] = None
     ):
-        """Generate and display a profile card"""
+        """Generate and display a profile card with pagination"""
         target = user or interaction.user
 
         if target.bot:
@@ -191,38 +535,19 @@ class Profile(commands.Cog):
         await interaction.response.defer()
 
         try:
-            # Gather all user data
-            level_data = get_user_level_data(interaction.guild.id, target.id)
-            balance = get_balance(interaction.guild.id, target.id)
-            reputation = get_rep_points(interaction.guild.id, target.id)
-            achievements = get_user_achievements(interaction.guild.id, target.id)
+            # Create the paginated view
+            view = ProfileView(self.bot, target, interaction.user, interaction.guild.id)
+            view.update_buttons()
 
-            # Get accent color
-            accent_color = get_user_color(target.id)
+            # Get the first page content
+            embed, file = await view.get_page_content()
 
-            # Generate profile card
-            card = await create_profile_card(
-                avatar_url=target.display_avatar.url,
-                username=target.display_name,
-                level=level_data["level"],
-                xp=level_data["xp"],
-                xp_needed=level_data["xp_needed"],
-                balance=balance,
-                reputation=reputation,
-                rank=level_data["rank"],
-                achievements_unlocked=achievements,
-                total_achievements=TOTAL_ACHIEVEMENTS,
-                messages=level_data["messages"],
-                voice_hours=level_data["voice_minutes"] // 60,
-                accent_color=accent_color
-            )
+            # Send with file and view
+            if file:
+                await interaction.followup.send(embed=embed, file=file, view=view)
+            else:
+                await interaction.followup.send(embed=embed, view=view)
 
-            # Convert to file
-            buffer = image_to_bytes(card)
-            file = discord.File(buffer, filename="profile.png")
-
-            # Send
-            await interaction.followup.send(file=file)
             logger.debug(f"Profile card generated for {target.name}")
 
         except Exception as e:
