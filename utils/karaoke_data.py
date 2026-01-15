@@ -99,6 +99,14 @@ KARAOKE_SONGS: Dict[str, KaraokeSong] = {
         duration=169,  # 2:49
         lyrics_file="youre_welcome.lrc"
     ),
+    "lucid_dreams": KaraokeSong(
+        id="lucid_dreams",
+        title="Lucid Dreams",
+        artist="Juice WRLD",
+        soundcloud_url="https://soundcloud.com/uiceheidd/lucid-dreams-forget-me",
+        duration=240,  # 4:00
+        lyrics_file="lucid_dreams.lrc"
+    ),
 }
 
 
