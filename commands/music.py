@@ -31,6 +31,7 @@ from datetime import timedelta
 import config
 from utils.logger import log_command, logger
 from utils.achievements_data import update_user_stat, check_and_complete_achievements
+from utils.quests_db import update_quest_progress
 from utils.audio_optimization import (
     get_ytdl_options,
     get_ytdl_playlist_options,
@@ -1157,7 +1158,13 @@ class MusicPlayer:
                 update_user_stat(self.current.requester.id, "songs_played", increment=1)
                 check_and_complete_achievements(self.current.requester.id)
             except Exception as e:
-                logger.debug(f"Failed to track songs_played: {e}")
+                logger.debug(f"Failed to track songs_played achievement: {e}")
+
+            # Track songs_played quest progress
+            try:
+                update_quest_progress(self.guild.id, self.current.requester.id, "songs_played", 1)
+            except Exception as e:
+                logger.debug(f"Failed to track songs_played quest: {e}")
 
             # Send now playing message
             await self._send_now_playing(self.current)
